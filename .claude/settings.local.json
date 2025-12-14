@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(npm run dev:*)",
+      "Bash(npx cap init \"FinSnap\" \"com.finsnap.app\" --web-dir=dist)",
+      "Bash(npm run build:*)",
+      "Bash(npx cap:*)",
+      "Bash(where:*)",
+      "Bash(gradlew.bat assembleDebug:*)",
+      "Bash(.gradlew.bat assembleDebug:*)",
+      "Bash(./gradlew.bat assembleDebug)",
+      "Bash(git init:*)",
+      "Bash(git config:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nInitial commit: FinSnap - AI-Powered Expense Tracker\n\nFeatures:\n- React 19 + TypeScript frontend with mobile-optimized UI\n- Supabase backend with PostgreSQL and Row Level Security\n- Google Gemini AI for intelligent transaction parsing from SMS and images\n- Capacitor for Android APK deployment\n- Multi-device sync with cloud backup\n- Secure API key management (server-side only)\n- Multi-currency support with automatic exchange rates\n- Smart categorization with recurring merchant rules\n- Comprehensive transaction history and analytics\n\nArchitecture:\n- Frontend: React 19, Tailwind CSS, Capacitor (Android)\n- Backend: Supabase (PostgreSQL, Auth, Edge Functions)\n- AI: Google Gemini 2.5 Flash API\n\nDocumentation:\n- README.md: Full feature overview and getting started guide\n- CLAUDE.md: Architecture and development guide for future Claude Code instances\n- docs/SETUP_GUIDE.md: Step-by-step setup instructions\n- docs/DATABASE_SCHEMA.md: Complete database schema reference\n\nThe app is fully functional and ready for personal use with Supabase cloud backend.\n\n🤖 Generated with Claude Code\nEOF\n)\")"
+    ]
+  }
+}
