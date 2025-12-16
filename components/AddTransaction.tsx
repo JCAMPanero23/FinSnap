@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { parseTransactions } from '../services/supabaseService';
+import { parseTransactions } from '../services/geminiService';
 import { Transaction, TransactionType, AppSettings } from '../types';
 import { Sparkles, ArrowRight, X, Check, Loader2, MessageSquareText, Clipboard, Info, Image as ImageIcon, Banknote, BrainCircuit, Calendar } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
@@ -65,7 +65,17 @@ const AddTransaction: React.FC<AddTransactionProps> = ({ onAdd, onCancel, settin
 
       results.forEach(r => {
         if (!isDuplicate(r)) {
-          uniqueResults.push({ ...r, id: uuidv4() });
+          // Map accountId: If Gemini returned last4digits, find the actual account UUID
+          let mappedAccountId = r.accountId;
+          if (mappedAccountId && !mappedAccountId.includes('-')) {
+            // It's likely last4digits, not a UUID (UUIDs contain hyphens)
+            const matchedAccount = settings.accounts.find(a =>
+              a.last4Digits === mappedAccountId || a.id === mappedAccountId
+            );
+            mappedAccountId = matchedAccount?.id;
+          }
+
+          uniqueResults.push({ ...r, id: uuidv4(), accountId: mappedAccountId });
         } else {
           duplicateCount++;
         }

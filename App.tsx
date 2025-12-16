@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, PlusCircle, History, Settings, Wallet, CalendarRange, LogOut } from 'lucide-react';
+import { LayoutDashboard, PlusCircle, History, Settings, Wallet, CalendarRange, LogOut, Target, Shield, Tags } from 'lucide-react';
 import { supabase } from './lib/supabase';
 import Auth from './components/Auth';
+import ResetPassword from './components/ResetPassword';
 import Dashboard from './components/Dashboard';
 import AddTransaction from './components/AddTransaction';
 import TransactionList from './components/TransactionList';
@@ -9,38 +10,56 @@ import EditTransactionModal from './components/EditTransactionModal';
 import SettingsView from './components/SettingsView';
 import AccountsView from './components/AccountsView';
 import CalendarView from './components/CalendarView';
-import { Transaction, View, AppSettings, TransactionType, Category, Account, RecurringRule } from './types';
+import PlanningView from './components/PlanningView';
+import CategoriesView from './components/CategoriesView';
+import WarrantiesView from './components/WarrantiesView';
+import RadialNavigation from './components/RadialNavigation';
+import { Transaction, View, AppSettings, TransactionType, Category, Account, RecurringRule, SavingsGoal, WarrantyItem } from './types';
 import { v4 as uuidv4 } from 'uuid';
 
 const App: React.FC = () => {
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [isResetPasswordPage, setIsResetPasswordPage] = useState(false);
   const [currentView, setCurrentView] = useState<View>('dashboard');
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [settings, setSettings] = useState<AppSettings>({
     baseCurrency: 'USD',
     categories: [],
     accounts: [],
-    recurringRules: []
+    recurringRules: [],
+    savingsGoals: [],
+    warranties: []
   });
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
 
+  // Check if on reset password page
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash.includes('type=recovery') || window.location.pathname === '/reset-password') {
+      setIsResetPasswordPage(true);
+      setLoading(false);
+    }
+  }, []);
+
   // Check auth session on mount
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setLoading(false);
-    });
+    if (!isResetPasswordPage) {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        setSession(session);
+        setLoading(false);
+      });
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
+      const {
+        data: { subscription },
+      } = supabase.auth.onAuthStateChange((_event, session) => {
+        setSession(session);
+      });
 
-    return () => subscription.unsubscribe();
-  }, []);
+      return () => subscription.unsubscribe();
+    }
+  }, [isResetPasswordPage]);
 
   // Load user data when authenticated
   useEffect(() => {
@@ -142,7 +161,9 @@ const App: React.FC = () => {
         baseCurrency: userSettings?.base_currency || 'USD',
         categories: mappedCategories,
         accounts: mappedAccounts,
-        recurringRules: mappedRules
+        recurringRules: mappedRules,
+        savingsGoals: [], // TODO: Load from database when table is created
+        warranties: [] // TODO: Load from database when table is created
       });
 
       setTransactions(mappedTransactions);
@@ -351,6 +372,123 @@ const App: React.FC = () => {
     setCurrentView('history');
   };
 
+  const handleUpdateSettings = async (newSettings: AppSettings) => {
+    try {
+      const userId = session?.user?.id;
+      if (!userId) return;
+
+      // Update categories
+      for (const category of newSettings.categories) {
+        const existingCategory = settings.categories.find(c => c.id === category.id);
+        if (!existingCategory) {
+          // New category - insert
+          await supabase.from('categories').insert({
+            id: category.id,
+            user_id: userId,
+            name: category.name,
+            color: category.color,
+            is_default: category.isDefault || false
+          });
+        } else if (JSON.stringify(existingCategory) !== JSON.stringify(category)) {
+          // Updated category - update
+          await supabase.from('categories').update({
+            name: category.name,
+            color: category.color,
+            is_default: category.isDefault || false
+          }).eq('id', category.id);
+        }
+      }
+
+      // Delete removed categories
+      const removedCategories = settings.categories.filter(
+        c => !newSettings.categories.find(nc => nc.id === c.id)
+      );
+      for (const category of removedCategories) {
+        await supabase.from('categories').delete().eq('id', category.id);
+      }
+
+      // Update accounts
+      for (const account of newSettings.accounts) {
+        const existingAccount = settings.accounts.find(a => a.id === account.id);
+        if (!existingAccount) {
+          // New account - insert
+          await supabase.from('accounts').insert({
+            id: account.id,
+            user_id: userId,
+            name: account.name,
+            type: account.type,
+            last4_digits: account.last4Digits,
+            color: account.color,
+            currency: account.currency,
+            balance: account.balance,
+            total_credit_limit: account.totalCreditLimit,
+            monthly_spending_limit: account.monthlySpendingLimit,
+            payment_due_day: account.paymentDueDay,
+            auto_update_balance: account.autoUpdateBalance !== false
+          });
+        } else {
+          // Updated account - update
+          await supabase.from('accounts').update({
+            name: account.name,
+            type: account.type,
+            last4_digits: account.last4Digits,
+            color: account.color,
+            currency: account.currency,
+            balance: account.balance,
+            total_credit_limit: account.totalCreditLimit,
+            monthly_spending_limit: account.monthlySpendingLimit,
+            payment_due_day: account.paymentDueDay,
+            auto_update_balance: account.autoUpdateBalance !== false
+          }).eq('id', account.id);
+        }
+      }
+
+      // Delete removed accounts
+      const removedAccounts = settings.accounts.filter(
+        a => !newSettings.accounts.find(na => na.id === a.id)
+      );
+      for (const account of removedAccounts) {
+        await supabase.from('accounts').delete().eq('id', account.id);
+      }
+
+      // Update recurring rules
+      for (const rule of newSettings.recurringRules) {
+        const existingRule = settings.recurringRules.find(r => r.id === rule.id);
+        if (!existingRule) {
+          // New rule - insert
+          await supabase.from('recurring_rules').insert({
+            id: rule.id,
+            user_id: userId,
+            merchant_keyword: rule.merchantKeyword,
+            category: rule.category,
+            type: rule.type
+          });
+        }
+      }
+
+      // Delete removed rules
+      const removedRules = settings.recurringRules.filter(
+        r => !newSettings.recurringRules.find(nr => nr.id === r.id)
+      );
+      for (const rule of removedRules) {
+        await supabase.from('recurring_rules').delete().eq('id', rule.id);
+      }
+
+      // Update base currency
+      if (newSettings.baseCurrency !== settings.baseCurrency) {
+        await supabase.from('user_settings').update({
+          base_currency: newSettings.baseCurrency
+        }).eq('id', userId);
+      }
+
+      // Update local state
+      setSettings(newSettings);
+    } catch (error) {
+      console.error('Error updating settings:', error);
+      alert('Failed to save settings. Please try again.');
+    }
+  };
+
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     setSession(null);
@@ -359,7 +497,9 @@ const App: React.FC = () => {
       baseCurrency: 'USD',
       categories: [],
       accounts: [],
-      recurringRules: []
+      recurringRules: [],
+      savingsGoals: [],
+      warranties: []
     });
   };
 
@@ -402,11 +542,33 @@ const App: React.FC = () => {
             onSelectTransaction={handleEditTransaction}
           />
         );
+      case 'planning':
+        return (
+          <PlanningView
+            settings={settings}
+            onUpdateSettings={handleUpdateSettings}
+            transactions={transactions}
+          />
+        );
+      case 'categories':
+        return (
+          <CategoriesView
+            settings={settings}
+            onUpdateSettings={handleUpdateSettings}
+          />
+        );
+      case 'warranties':
+        return (
+          <WarrantiesView
+            settings={settings}
+            onUpdateSettings={handleUpdateSettings}
+          />
+        );
       case 'settings':
         return (
           <SettingsView
             settings={settings}
-            onUpdateSettings={setSettings}
+            onUpdateSettings={handleUpdateSettings}
             onBack={() => setCurrentView('dashboard')}
           />
         );
@@ -414,6 +576,10 @@ const App: React.FC = () => {
         return <Dashboard transactions={transactions} accounts={settings.accounts} />;
     }
   };
+
+  if (isResetPasswordPage) {
+    return <ResetPassword />;
+  }
 
   if (loading) {
     return (
@@ -460,7 +626,7 @@ const App: React.FC = () => {
       {/* Main Content Area */}
       <main className="flex-1 overflow-y-auto scroll-smooth no-scrollbar">
         {currentView !== 'settings' ? (
-          <div className="p-6">{renderView()}</div>
+          <div className="p-6 pb-32">{renderView()}</div>
         ) : (
           renderView()
         )}
@@ -479,55 +645,13 @@ const App: React.FC = () => {
         />
       )}
 
-      {/* Bottom Navigation */}
-      {currentView !== 'settings' && (
-        <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 px-6 py-3 pb-6 flex justify-between items-center z-30 max-w-md mx-auto text-[10px] font-medium">
-          <button
-            onClick={() => setCurrentView('dashboard')}
-            className={`flex flex-col items-center gap-1 transition-colors ${currentView === 'dashboard' ? 'text-brand-600' : 'text-slate-400 hover:text-slate-600'}`}
-          >
-            <LayoutDashboard size={24} strokeWidth={currentView === 'dashboard' ? 2.5 : 2} />
-            Home
-          </button>
-
-          <button
-            onClick={() => setCurrentView('accounts')}
-            className={`flex flex-col items-center gap-1 transition-colors ${currentView === 'accounts' ? 'text-brand-600' : 'text-slate-400 hover:text-slate-600'}`}
-          >
-            <Wallet size={24} strokeWidth={currentView === 'accounts' ? 2.5 : 2} />
-            Accounts
-          </button>
-
-          {/* Floating Action Button for Add */}
-          <div className="relative -top-5">
-            <button
-              onClick={() => setCurrentView('add')}
-              className={`w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-transform active:scale-95 ${
-                currentView === 'add'
-                  ? 'bg-slate-800 text-white rotate-45'
-                  : 'bg-brand-600 text-white shadow-brand-500/40'
-              }`}
-            >
-              <PlusCircle size={28} />
-            </button>
-          </div>
-
-          <button
-            onClick={() => { setSelectedAccountId(null); setCurrentView('history'); }}
-            className={`flex flex-col items-center gap-1 transition-colors ${currentView === 'history' ? 'text-brand-600' : 'text-slate-400 hover:text-slate-600'}`}
-          >
-            <History size={24} strokeWidth={currentView === 'history' ? 2.5 : 2} />
-            History
-          </button>
-
-          <button
-            onClick={() => setCurrentView('calendar')}
-            className={`flex flex-col items-center gap-1 transition-colors ${currentView === 'calendar' ? 'text-brand-600' : 'text-slate-400 hover:text-slate-600'}`}
-          >
-            <CalendarRange size={24} strokeWidth={currentView === 'calendar' ? 2.5 : 2} />
-            Calendar
-          </button>
-        </nav>
+      {/* Radial Navigation (Only show if NOT in Add or Settings mode) */}
+      {currentView !== 'add' && currentView !== 'settings' && (
+        <RadialNavigation
+          currentView={currentView}
+          onNavigate={setCurrentView}
+          onAdd={() => setCurrentView('add')}
+        />
       )}
     </div>
   );

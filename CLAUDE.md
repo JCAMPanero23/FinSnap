@@ -35,16 +35,18 @@ npx cap open android
 
 ## Environment Setup
 
-### For Web Development
-Create `.env.local` with (optional, for local testing without Supabase):
+### For Local Development
+Create `.env.local` with your Gemini API key:
 ```
 GEMINI_API_KEY=your-api-key-here
 ```
 
-### For Production (APK)
-- Gemini API key is stored as a secret in **Supabase Edge Functions**
-- Never included in the client app code
-- Edge Function `parse-transactions` makes all API calls server-side
+**Important**: The app uses `services/geminiService.ts` for local development, which calls the Gemini API directly from the client with your `.env.local` key.
+
+### For Production (APK) - Future Enhancement
+- Production can use Supabase Edge Functions for server-side API calls
+- Edge Function `parse-transactions` would store API key securely server-side
+- Current implementation: Client-side Gemini API calls (suitable for personal use)
 
 ## Architecture
 
@@ -107,9 +109,10 @@ GEMINI_API_KEY=your-api-key-here
 
 1. **Input** → User pastes SMS/email text or uploads image in `AddTransaction.tsx`
 2. **AI Parsing** → `geminiService.ts:parseTransactions()` sends to Gemini API with structured schema
-3. **Post-Processing** → Service calculates exchange rates and refines amounts using balance snapshots
-4. **State Update** → `App.tsx:handleAddTransactions()` updates both transactions AND account balances
-5. **Persistence** → Changes auto-save to localStorage via useEffect hooks
+3. **Account Mapping** → `AddTransaction.tsx` maps last4digits returned by AI to actual account UUIDs
+4. **Post-Processing** → Service calculates exchange rates and refines amounts using balance snapshots
+5. **State Update** → `App.tsx:handleAddTransactions()` inserts transactions to Supabase and updates account balances
+6. **Persistence** → All changes saved to Supabase database with real-time sync
 
 ### Balance Update Logic (App.tsx:70-116)
 
@@ -143,26 +146,38 @@ This dual approach handles both:
 
 ### Component Architecture
 
-**View Components** (all receive props from App.tsx, no local persistence):
+**View Components** (all receive props from App.tsx):
 - `Dashboard.tsx` - Summary cards, charts (uses Recharts)
 - `AddTransaction.tsx` - Input form with image upload, calls geminiService
 - `TransactionList.tsx` - Filterable history with edit/delete
 - `AccountsView.tsx` - Account cards with balances
 - `CalendarView.tsx` - Month/date navigation
+- `PlanningView.tsx` - Budget planning and savings goals
+- `CategoriesView.tsx` - Dedicated category management
+- `WarrantiesView.tsx` - Warranty tracking with receipt images
 - `SettingsView.tsx` - Categories, accounts, recurring rules config
 - `EditTransactionModal.tsx` - Edit/delete/create recurring rules
+- `Auth.tsx` - Authentication with sign in/sign up/forgot password
+- `ResetPassword.tsx` - Password reset page
+- `LiveScanner.tsx` - Real-time camera scanning (future feature)
+- `ReceiptViewer.tsx` - Receipt image viewer component
 
-**Navigation**: Bottom nav bar in `App.tsx:247-295` with floating FAB for "Add"
+**Navigation**: Radial navigation component (`RadialNavigation.tsx`) with circular menu for all views
 
 ### Type System (types.ts)
 
 **Key Interfaces**:
-- `Transaction` - Includes `parsedMeta` for AI-extracted balance snapshots
+- `Transaction` - Includes `parsedMeta` for AI-extracted balance snapshots, `groupId` for split transactions
 - `Account` - Balances can be negative (credit card debt) or positive (assets)
-- `AppSettings` - Categories, accounts, recurring rules, base currency
-- `RecurringRule` - Merchant keyword → category/type mapping
+- `AppSettings` - Categories, accounts, recurring rules, savings goals, warranties
+- `RecurringRule` - Merchant keyword → category/type mapping with frequency and billing details
+- `SavingsGoal` - Target amount tracking with deadlines
+- `WarrantyItem` - Receipt storage with expiration tracking
+- `Category` - Enhanced with icons and monthly budgets
 
 **Important**: `TransactionType.TRANSFER` is modeled as paired EXPENSE+INCOME transactions with `isTransfer: true` flag.
+
+**Supported Views**: `'dashboard' | 'accounts' | 'categories' | 'add' | 'history' | 'settings' | 'calendar' | 'planning' | 'warranties'`
 
 ### Mobile-First Design
 
@@ -173,9 +188,20 @@ This dual approach handles both:
 
 ## Important Implementation Details
 
+### Account ID Mapping
+
+When AI parses transactions, it returns last4digits (e.g., "XXX920001") which are mapped to actual account UUIDs in `AddTransaction.tsx:68-76` before saving to database.
+
+### Settings Persistence
+
+All settings updates go through `App.tsx:handleUpdateSettings()` which:
+- Syncs categories, accounts, and recurring rules to Supabase
+- Handles inserts, updates, and deletes
+- Maintains data integrity across refreshes
+
 ### Account Balance Reconciliation
 
-When editing/deleting transactions, balances are NOT automatically adjusted backward (App.tsx:118-123). Users must manually correct account balances via Settings if needed. This is a known simplification.
+When editing/deleting transactions, balances are NOT automatically adjusted backward. Users must manually correct account balances via Settings if needed. This is a known simplification.
 
 ### Currency Handling
 
@@ -191,10 +217,22 @@ Images are converted to base64 in `AddTransaction.tsx` before sending to Gemini 
 
 Not automatic triggers - they're hints to the AI parser (geminiService.ts:54-57). The AI uses keyword matching to suggest categories, but rules don't auto-create transactions.
 
+### Authentication
+
+- Supabase Auth with email/password
+- Forgot password flow with email reset link
+- Password reset page at `/reset-password` route
+- Row Level Security ensures user data isolation
+
+## Utilities
+
+- `start-dev.bat` - Windows batch file to quickly start dev server
+- Local Gemini API key in `.env.local` for development
+- Supabase configuration in `lib/supabase.ts`
+
 ## Known Limitations
 
-- No backend - all data in browser localStorage
-- API key exposed in frontend bundle (acceptable for personal use)
-- No multi-device sync
 - Balance adjustments on edit/delete require manual reconciliation
 - Recurring rules are parsing hints, not scheduled transactions
+- Savings goals and warranties tables not yet created in Supabase (local state only)
+- API key exposed in client bundle (acceptable for personal use)

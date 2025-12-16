@@ -9,23 +9,33 @@ interface AuthProps {
 const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
   const [loading, setLoading] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
+  const [isForgotPassword, setIsForgotPassword] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setSuccessMessage(null);
 
     try {
-      if (isSignUp) {
+      if (isForgotPassword) {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}/reset-password`,
+        });
+        if (error) throw error;
+        setSuccessMessage('Password reset link sent! Check your email.');
+        setEmail('');
+      } else if (isSignUp) {
         const { error } = await supabase.auth.signUp({
           email,
           password,
         });
         if (error) throw error;
-        alert('Check your email for the confirmation link!');
+        setSuccessMessage('Check your email for the confirmation link!');
       } else {
         const { error } = await supabase.auth.signInWithPassword({
           email,
@@ -50,7 +60,9 @@ const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
           </div>
         </div>
         <h1 className="text-3xl font-bold text-center text-slate-800 mb-2">FinSnap</h1>
-        <p className="text-center text-slate-500 mb-8">AI-Powered Expense Tracker</p>
+        <p className="text-center text-slate-500 mb-8">
+          {isForgotPassword ? 'Reset Your Password' : 'AI-Powered Expense Tracker'}
+        </p>
 
         <form onSubmit={handleAuth} className="space-y-4">
           <div>
@@ -65,22 +77,30 @@ const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none"
-              placeholder="••••••••"
-              required
-              minLength={6}
-            />
-          </div>
+          {!isForgotPassword && (
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">Password</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent outline-none"
+                placeholder="••••••••"
+                required
+                minLength={6}
+              />
+            </div>
+          )}
 
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
               {error}
+            </div>
+          )}
+
+          {successMessage && (
+            <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm">
+              {successMessage}
             </div>
           )}
 
@@ -94,21 +114,36 @@ const Auth: React.FC<AuthProps> = ({ onAuthSuccess }) => {
             ) : (
               <>
                 <LogIn size={20} />
-                {isSignUp ? 'Sign Up' : 'Sign In'}
+                {isForgotPassword ? 'Send Reset Link' : isSignUp ? 'Sign Up' : 'Sign In'}
               </>
             )}
           </button>
         </form>
 
-        <div className="mt-6 text-center">
+        <div className="mt-6 text-center space-y-2">
+          {!isForgotPassword && (
+            <button
+              onClick={() => {
+                setIsSignUp(!isSignUp);
+                setError(null);
+                setSuccessMessage(null);
+              }}
+              className="block w-full text-brand-600 hover:text-brand-700 text-sm font-medium"
+            >
+              {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
+            </button>
+          )}
+
           <button
             onClick={() => {
-              setIsSignUp(!isSignUp);
+              setIsForgotPassword(!isForgotPassword);
+              setIsSignUp(false);
               setError(null);
+              setSuccessMessage(null);
             }}
-            className="text-brand-600 hover:text-brand-700 text-sm font-medium"
+            className="block w-full text-slate-600 hover:text-slate-700 text-sm"
           >
-            {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
+            {isForgotPassword ? 'Back to Sign In' : 'Forgot Password?'}
           </button>
         </div>
       </div>
