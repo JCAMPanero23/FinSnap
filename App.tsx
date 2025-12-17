@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { LayoutDashboard, PlusCircle, History, Settings, Wallet, CalendarRange, LogOut, Target, Shield, Tags } from 'lucide-react';
 import { supabase } from './lib/supabase';
 import Auth from './components/Auth';
@@ -34,6 +34,16 @@ const App: React.FC = () => {
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
 
+  // Date Filter State
+  const [dateFilter, setDateFilter] = useState<'month' | 'year' | 'week' | 'custom' | 'all'>('month');
+  const [customStartDate, setCustomStartDate] = useState<string>('');
+  const [customEndDate, setCustomEndDate] = useState<string>('');
+
+  // Navigation offsets (0 = current, -1 = previous, +1 = next)
+  const [monthOffset, setMonthOffset] = useState(0);
+  const [yearOffset, setYearOffset] = useState(0);
+  const [weekOffset, setWeekOffset] = useState(0);
+
   // Check if on reset password page
   useEffect(() => {
     const hash = window.location.hash;
@@ -67,6 +77,65 @@ const App: React.FC = () => {
       loadUserData();
     }
   }, [session]);
+
+  // Filter transactions based on date filter
+  const filteredTransactions = useMemo(() => {
+    if (dateFilter === 'all') {
+      return transactions;
+    }
+
+    const now = new Date();
+
+    return transactions.filter(t => {
+      const [yStr, mStr, dStr] = t.date.split('-');
+      const txYear = parseInt(yStr);
+      const txMonth = parseInt(mStr) - 1; // 0-indexed
+      const txDay = parseInt(dStr);
+      const txDate = new Date(txYear, txMonth, txDay);
+
+      switch (dateFilter) {
+        case 'month': {
+          // Calculate target month with offset
+          const targetDate = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
+          const targetYear = targetDate.getFullYear();
+          const targetMonth = targetDate.getMonth();
+          return txYear === targetYear && txMonth === targetMonth;
+        }
+
+        case 'year': {
+          const targetYear = now.getFullYear() + yearOffset;
+          return txYear === targetYear;
+        }
+
+        case 'week': {
+          // Get start of target week
+          const targetWeekStart = new Date(now);
+          targetWeekStart.setDate(now.getDate() + (weekOffset * 7) - now.getDay());
+          targetWeekStart.setHours(0, 0, 0, 0);
+
+          // Get end of target week
+          const targetWeekEnd = new Date(targetWeekStart);
+          targetWeekEnd.setDate(targetWeekStart.getDate() + 6);
+          targetWeekEnd.setHours(23, 59, 59, 999);
+
+          return txDate >= targetWeekStart && txDate <= targetWeekEnd;
+        }
+
+        case 'custom': {
+          if (!customStartDate || !customEndDate) return true;
+
+          const startDate = new Date(customStartDate);
+          const endDate = new Date(customEndDate);
+          endDate.setHours(23, 59, 59, 999);
+
+          return txDate >= startDate && txDate <= endDate;
+        }
+
+        default:
+          return true;
+      }
+    });
+  }, [transactions, dateFilter, monthOffset, yearOffset, weekOffset, customStartDate, customEndDate]);
 
   const loadUserData = async () => {
     try {
@@ -377,6 +446,28 @@ const App: React.FC = () => {
       const userId = session?.user?.id;
       if (!userId) return;
 
+      // Handle Developer Reset Actions
+      if ((newSettings as any).__resetTransactions) {
+        // Soft Reset - Delete all transactions only
+        await supabase.from('transactions').delete().eq('user_id', userId);
+        setTransactions([]);
+        return;
+      }
+
+      if ((newSettings as any).__resetToDefault) {
+        // Hard Reset - Delete all user data
+        await supabase.from('transactions').delete().eq('user_id', userId);
+        await supabase.from('recurring_rules').delete().eq('user_id', userId);
+        await supabase.from('accounts').delete().eq('user_id', userId);
+        await supabase.from('categories').delete().eq('user_id', userId);
+        await supabase.from('user_settings').delete().eq('user_id', userId);
+
+        // Reset to defaults
+        setTransactions([]);
+        setSettings(DEFAULT_SETTINGS);
+        return;
+      }
+
       // Update categories
       for (const category of newSettings.categories) {
         const existingCategory = settings.categories.find(c => c.id === category.id);
@@ -417,7 +508,7 @@ const App: React.FC = () => {
             user_id: userId,
             name: account.name,
             type: account.type,
-            last4_digits: account.last4Digits,
+            last_4_digits: account.last4Digits,
             color: account.color,
             currency: account.currency,
             balance: account.balance,
@@ -431,7 +522,7 @@ const App: React.FC = () => {
           await supabase.from('accounts').update({
             name: account.name,
             type: account.type,
-            last4_digits: account.last4Digits,
+            last_4_digits: account.last4Digits,
             color: account.color,
             currency: account.currency,
             balance: account.balance,
@@ -503,10 +594,89 @@ const App: React.FC = () => {
     });
   };
 
+  // Navigation handlers
+  const handlePreviousPeriod = () => {
+    switch (dateFilter) {
+      case 'month':
+        setMonthOffset(prev => prev - 1);
+        break;
+      case 'year':
+        setYearOffset(prev => prev - 1);
+        break;
+      case 'week':
+        setWeekOffset(prev => prev - 1);
+        break;
+    }
+  };
+
+  const handleNextPeriod = () => {
+    switch (dateFilter) {
+      case 'month':
+        setMonthOffset(prev => prev + 1);
+        break;
+      case 'year':
+        setYearOffset(prev => prev + 1);
+        break;
+      case 'week':
+        setWeekOffset(prev => prev + 1);
+        break;
+    }
+  };
+
+  const handleDateFilterChange = (filter: 'month' | 'year' | 'week' | 'custom' | 'all') => {
+    setDateFilter(filter);
+    // Reset offsets when changing filter type
+    setMonthOffset(0);
+    setYearOffset(0);
+    setWeekOffset(0);
+  };
+
+  // Get current period label for display
+  const getCurrentPeriodLabel = () => {
+    const now = new Date();
+    switch (dateFilter) {
+      case 'month': {
+        const targetDate = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1);
+        return targetDate.toLocaleString('default', { month: 'long', year: 'numeric' });
+      }
+      case 'year': {
+        return (now.getFullYear() + yearOffset).toString();
+      }
+      case 'week': {
+        const targetWeekStart = new Date(now);
+        targetWeekStart.setDate(now.getDate() + (weekOffset * 7) - now.getDay());
+        const weekEnd = new Date(targetWeekStart);
+        weekEnd.setDate(targetWeekStart.getDate() + 6);
+        return `${targetWeekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${weekEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`;
+      }
+      case 'custom':
+        return customStartDate && customEndDate ? `${customStartDate} to ${customEndDate}` : 'Custom Range';
+      case 'all':
+        return 'All Time';
+      default:
+        return '';
+    }
+  };
+
   const renderView = () => {
     switch (currentView) {
       case 'dashboard':
-        return <Dashboard transactions={transactions} accounts={settings.accounts} />;
+        return (
+          <Dashboard
+            transactions={filteredTransactions}
+            accounts={settings.accounts}
+            baseCurrency={settings.baseCurrency}
+            dateFilter={dateFilter}
+            onDateFilterChange={handleDateFilterChange}
+            customStartDate={customStartDate}
+            customEndDate={customEndDate}
+            onCustomStartDateChange={setCustomStartDate}
+            onCustomEndDateChange={setCustomEndDate}
+            onPreviousPeriod={handlePreviousPeriod}
+            onNextPeriod={handleNextPeriod}
+            currentPeriodLabel={getCurrentPeriodLabel()}
+          />
+        );
       case 'add':
         return (
           <AddTransaction
@@ -554,7 +724,17 @@ const App: React.FC = () => {
         return (
           <CategoriesView
             settings={settings}
+            transactions={filteredTransactions}
             onUpdateSettings={handleUpdateSettings}
+            dateFilter={dateFilter}
+            onDateFilterChange={handleDateFilterChange}
+            customStartDate={customStartDate}
+            customEndDate={customEndDate}
+            onCustomStartDateChange={setCustomStartDate}
+            onCustomEndDateChange={setCustomEndDate}
+            onPreviousPeriod={handlePreviousPeriod}
+            onNextPeriod={handleNextPeriod}
+            currentPeriodLabel={getCurrentPeriodLabel()}
           />
         );
       case 'warranties':
@@ -573,7 +753,7 @@ const App: React.FC = () => {
           />
         );
       default:
-        return <Dashboard transactions={transactions} accounts={settings.accounts} />;
+        return <Dashboard transactions={transactions} accounts={settings.accounts} baseCurrency={settings.baseCurrency} />;
     }
   };
 

@@ -1,11 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import { AppSettings, Category, Transaction, TransactionType } from '../types';
-import { 
-  Plus, Trash2, Tag, Edit3, Check, X, Palette, 
-  ShoppingBag, Utensils, Car, Zap, Film, Heart, 
+import {
+  Plus, Trash2, Tag, Edit3, Check, X, Palette,
+  ShoppingBag, Utensils, Car, Zap, Film, Heart,
   Briefcase, ArrowRightLeft, MoreHorizontal, Home,
   Smartphone, Plane, Coffee, Gift, Music, Gamepad2,
-  BookOpen, GraduationCap, Baby, Dog, Wrench, Wifi, Fuel
+  BookOpen, GraduationCap, Baby, Dog, Wrench, Wifi, Fuel, Calendar, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -13,6 +13,15 @@ interface CategoriesViewProps {
   settings: AppSettings;
   transactions: Transaction[];
   onUpdateSettings: (settings: AppSettings) => void;
+  dateFilter: 'month' | 'year' | 'week' | 'custom' | 'all';
+  onDateFilterChange: (filter: 'month' | 'year' | 'week' | 'custom' | 'all') => void;
+  customStartDate: string;
+  customEndDate: string;
+  onCustomStartDateChange: (date: string) => void;
+  onCustomEndDateChange: (date: string) => void;
+  onPreviousPeriod: () => void;
+  onNextPeriod: () => void;
+  currentPeriodLabel: string;
 }
 
 const DEFAULT_COLORS = [
@@ -29,7 +38,20 @@ const ICON_LIB: Record<string, any> = {
   BookOpen, GraduationCap, Baby, Dog, Wrench, Wifi, Fuel, Tag
 };
 
-const CategoriesView: React.FC<CategoriesViewProps> = ({ settings, transactions, onUpdateSettings }) => {
+const CategoriesView: React.FC<CategoriesViewProps> = ({
+  settings,
+  transactions,
+  onUpdateSettings,
+  dateFilter,
+  onDateFilterChange,
+  customStartDate,
+  customEndDate,
+  onCustomStartDateChange,
+  onCustomEndDateChange,
+  onPreviousPeriod,
+  onNextPeriod,
+  currentPeriodLabel
+}) => {
   const [newCategoryName, setNewCategoryName] = useState('');
   
   // Budget Editing State
@@ -39,27 +61,16 @@ const CategoriesView: React.FC<CategoriesViewProps> = ({ settings, transactions,
   // Category Editing State (Name, Color, Icon)
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
 
-  // Calculate spending per category for the current month
+  // Calculate spending per category (transactions are already filtered by date in App.tsx)
   const categoryStats = useMemo(() => {
-    const now = new Date();
-    const currentMonth = now.getMonth(); // 0-indexed (0 = Jan)
-    const currentYear = now.getFullYear();
-    
     const stats: Record<string, number> = {};
-    
-    transactions.forEach(t => {
+
+    (transactions || []).forEach(t => {
       if (t.type === TransactionType.EXPENSE) {
-        // Parse date manually (YYYY-MM-DD) to avoid timezone shifts causing off-by-one month errors
-        const [yStr, mStr] = t.date.split('-');
-        const tYear = parseInt(yStr);
-        const tMonth = parseInt(mStr) - 1; // Convert 1-12 to 0-11
-        
-        if (tYear === currentYear && tMonth === currentMonth) {
-          stats[t.category] = (stats[t.category] || 0) + t.amount;
-        }
+        stats[t.category] = (stats[t.category] || 0) + t.amount;
       }
     });
-    
+
     return stats;
   }, [transactions]);
 
@@ -124,19 +135,81 @@ const CategoriesView: React.FC<CategoriesViewProps> = ({ settings, transactions,
      return <IconComp size={size} />;
   };
 
-  // Helper for current month display
-  const currentMonthName = new Date().toLocaleString('default', { month: 'long' });
-
   return (
     <div className="h-full flex flex-col pb-24 bg-slate-50">
       <div className="px-6 py-4 bg-white border-b border-slate-100 sticky top-0 z-10 flex justify-between items-center">
          <div>
             <h2 className="text-2xl font-bold text-slate-800">Categories</h2>
-            <p className="text-xs text-slate-400 mt-1">{currentMonthName} Spending & Budgets</p>
+            <p className="text-xs text-slate-400 mt-1">{currentPeriodLabel} Spending & Budgets</p>
          </div>
       </div>
 
       <div className="p-6 flex-1 overflow-y-auto space-y-6">
+
+        {/* Date Filter */}
+        <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
+          <div className="flex items-center gap-2 mb-3">
+            <Calendar size={16} className="text-brand-600" />
+            <h3 className="text-sm font-bold text-slate-700">Filter Period</h3>
+          </div>
+
+          <div className="flex flex-wrap gap-2 mb-3">
+            {(['all', 'month', 'year', 'week', 'custom'] as const).map((filter) => (
+              <button
+                key={filter}
+                onClick={() => onDateFilterChange(filter)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  dateFilter === filter
+                    ? 'bg-brand-600 text-white shadow-sm'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                {filter === 'all' ? 'All Time' : filter.charAt(0).toUpperCase() + filter.slice(1)}
+              </button>
+            ))}
+          </div>
+
+          {/* Navigation Controls for Month/Year/Week */}
+          {(dateFilter === 'month' || dateFilter === 'year' || dateFilter === 'week') && (
+            <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+              <button
+                onClick={onPreviousPeriod}
+                className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-600 hover:text-brand-600"
+                title="Previous"
+              >
+                <ChevronLeft size={20} />
+              </button>
+              <div className="text-sm font-semibold text-slate-700 text-center flex-1">
+                {currentPeriodLabel}
+              </div>
+              <button
+                onClick={onNextPeriod}
+                className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-600 hover:text-brand-600"
+                title="Next"
+              >
+                <ChevronRight size={20} />
+              </button>
+            </div>
+          )}
+
+          {dateFilter === 'custom' && (
+            <div className="flex gap-2 items-center pt-2 border-t border-slate-100">
+              <input
+                type="date"
+                value={customStartDate}
+                onChange={(e) => onCustomStartDateChange(e.target.value)}
+                className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-brand-500 outline-none"
+              />
+              <span className="text-slate-400 text-xs">to</span>
+              <input
+                type="date"
+                value={customEndDate}
+                onChange={(e) => onCustomEndDateChange(e.target.value)}
+                className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-brand-500 outline-none"
+              />
+            </div>
+          )}
+        </div>
         
         {/* Add New */}
         <div className="bg-white rounded-xl p-2 shadow-sm border border-slate-200 flex gap-2">

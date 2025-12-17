@@ -1,19 +1,42 @@
 import React, { useMemo } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend } from 'recharts';
 import { Transaction, TransactionType, Account } from '../types';
-import { TrendingUp, TrendingDown, Wallet } from 'lucide-react';
+import { TrendingUp, TrendingDown, Wallet, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface DashboardProps {
   transactions: Transaction[];
   accounts: Account[];
+  baseCurrency: string;
+  dateFilter: 'month' | 'year' | 'week' | 'custom' | 'all';
+  onDateFilterChange: (filter: 'month' | 'year' | 'week' | 'custom' | 'all') => void;
+  customStartDate: string;
+  customEndDate: string;
+  onCustomStartDateChange: (date: string) => void;
+  onCustomEndDateChange: (date: string) => void;
+  onPreviousPeriod: () => void;
+  onNextPeriod: () => void;
+  currentPeriodLabel: string;
 }
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658'];
 
-const Dashboard: React.FC<DashboardProps> = ({ transactions, accounts }) => {
-  
-  // Use currency from settings (approx via transactions or default)
-  const displayCurrency = transactions.length > 0 ? transactions[0].currency : 'USD';
+const Dashboard: React.FC<DashboardProps> = ({
+  transactions,
+  accounts,
+  baseCurrency,
+  dateFilter,
+  onDateFilterChange,
+  customStartDate,
+  customEndDate,
+  onCustomStartDateChange,
+  onCustomEndDateChange,
+  onPreviousPeriod,
+  onNextPeriod,
+  currentPeriodLabel
+}) => {
+
+  // Use base currency from settings
+  const displayCurrency = baseCurrency;
 
   // Calculate Net Worth from Accounts
   const totalNetWorth = useMemo(() => {
@@ -82,6 +105,71 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, accounts }) => {
 
   return (
     <div className="space-y-6 pb-24">
+      {/* Date Filter */}
+      <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
+        <div className="flex items-center gap-2 mb-3">
+          <Calendar size={16} className="text-brand-600" />
+          <h3 className="text-sm font-bold text-slate-700">Filter Period</h3>
+        </div>
+
+        <div className="flex flex-wrap gap-2 mb-3">
+          {(['all', 'month', 'year', 'week', 'custom'] as const).map((filter) => (
+            <button
+              key={filter}
+              onClick={() => onDateFilterChange(filter)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                dateFilter === filter
+                  ? 'bg-brand-600 text-white shadow-sm'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              {filter === 'all' ? 'All Time' : filter.charAt(0).toUpperCase() + filter.slice(1)}
+            </button>
+          ))}
+        </div>
+
+        {/* Navigation Controls for Month/Year/Week */}
+        {(dateFilter === 'month' || dateFilter === 'year' || dateFilter === 'week') && (
+          <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+            <button
+              onClick={onPreviousPeriod}
+              className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-600 hover:text-brand-600"
+              title="Previous"
+            >
+              <ChevronLeft size={20} />
+            </button>
+            <div className="text-sm font-semibold text-slate-700 text-center flex-1">
+              {currentPeriodLabel}
+            </div>
+            <button
+              onClick={onNextPeriod}
+              className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-600 hover:text-brand-600"
+              title="Next"
+            >
+              <ChevronRight size={20} />
+            </button>
+          </div>
+        )}
+
+        {dateFilter === 'custom' && (
+          <div className="flex gap-2 items-center pt-2 border-t border-slate-100">
+            <input
+              type="date"
+              value={customStartDate}
+              onChange={(e) => onCustomStartDateChange(e.target.value)}
+              className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-brand-500 outline-none"
+            />
+            <span className="text-slate-400 text-xs">to</span>
+            <input
+              type="date"
+              value={customEndDate}
+              onChange={(e) => onCustomEndDateChange(e.target.value)}
+              className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-brand-500 outline-none"
+            />
+          </div>
+        )}
+      </div>
+
       {/* Balance Card */}
       <div className="bg-gradient-to-br from-brand-900 to-brand-600 rounded-2xl p-6 text-white shadow-lg">
         <div className="flex items-center gap-2 mb-1 opacity-80">
@@ -120,7 +208,7 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, accounts }) => {
         <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
            <h3 className="text-lg font-bold text-slate-800 mb-4">Monthly Trends</h3>
            <div className="h-[220px] w-full text-xs">
-             <ResponsiveContainer width="100%" height="100%">
+             <ResponsiveContainer width="100%" height="100%" minWidth={200} minHeight={220}>
                <BarChart data={monthlyData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b'}} />
@@ -144,7 +232,7 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, accounts }) => {
         <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
           <h3 className="text-lg font-bold text-slate-800 mb-4">Spending Breakdown</h3>
           <div className="h-[200px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height="100%" minWidth={200} minHeight={200}>
               <PieChart>
                 <Pie
                   data={categoryData}
