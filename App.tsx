@@ -441,16 +441,34 @@ const App: React.FC = () => {
     setCurrentView('history');
   };
 
-  const handleUpdateSettings = async (newSettings: AppSettings) => {
+  const handleUpdateSettings = async (newSettings: AppSettings, accountReplacements?: { newAccountId: string, replaceAccountId: string | 'ORPHANS' }[]) => {
     try {
       const userId = session?.user?.id;
       if (!userId) return;
 
       // Handle Developer Reset Actions
       if ((newSettings as any).__resetTransactions) {
-        // Soft Reset - Delete all transactions only
+        // Soft Reset - Delete all transactions and reset account balances to 0
         await supabase.from('transactions').delete().eq('user_id', userId);
+
+        // Reset all account balances to 0
+        const { data: userAccounts } = await supabase
+          .from('accounts')
+          .select('id')
+          .eq('user_id', userId);
+
+        if (userAccounts) {
+          for (const acc of userAccounts) {
+            await supabase
+              .from('accounts')
+              .update({ balance: 0 })
+              .eq('id', acc.id);
+          }
+        }
+
         setTransactions([]);
+        // Reload user data to get updated balances
+        await loadUserData();
         return;
       }
 
@@ -531,6 +549,92 @@ const App: React.FC = () => {
             payment_due_day: account.paymentDueDay,
             auto_update_balance: account.autoUpdateBalance !== false
           }).eq('id', account.id);
+        }
+      }
+
+      // Auto-link orphaned transactions by last4Digits
+      for (const account of newSettings.accounts) {
+        if (account.last4Digits) {
+          // Find orphaned transactions that match this account's last4Digits
+          const { data: orphanedTxns } = await supabase
+            .from('transactions')
+            .select('*')
+            .eq('user_id', userId)
+            .is('account_id', null);
+
+          if (orphanedTxns && orphanedTxns.length > 0) {
+            // Filter transactions where the account field contains the last4Digits
+            const matchingTxns = orphanedTxns.filter(t =>
+              t.account && t.account.includes(account.last4Digits!)
+            );
+
+            // Update matching transactions to link them to this account
+            for (const txn of matchingTxns) {
+              await supabase
+                .from('transactions')
+                .update({ account_id: account.id })
+                .eq('id', txn.id);
+            }
+
+            if (matchingTxns.length > 0) {
+              console.log(`Auto-linked ${matchingTxns.length} transactions to account ${account.name}`);
+            }
+          }
+        }
+      }
+
+      // Handle account replacements (manual reassignment)
+      if (accountReplacements && accountReplacements.length > 0) {
+        for (const replacement of accountReplacements) {
+          if (replacement.replaceAccountId === 'ORPHANS') {
+            // Reassign all orphaned transactions to the new account
+            await supabase
+              .from('transactions')
+              .update({ account_id: replacement.newAccountId })
+              .eq('user_id', userId)
+              .is('account_id', null);
+
+            console.log(`Reassigned orphaned transactions to account ${replacement.newAccountId}`);
+          } else {
+            // Reassign all transactions from old account to new account
+            await supabase
+              .from('transactions')
+              .update({ account_id: replacement.newAccountId })
+              .eq('user_id', userId)
+              .eq('account_id', replacement.replaceAccountId);
+
+            console.log(`Reassigned transactions from ${replacement.replaceAccountId} to ${replacement.newAccountId}`);
+          }
+        }
+
+        // Reload transactions to reflect changes
+        const { data: updatedTransactions } = await supabase
+          .from('transactions')
+          .select('*')
+          .eq('user_id', userId)
+          .order('date', { ascending: false });
+
+        if (updatedTransactions) {
+          setTransactions(updatedTransactions.map(t => ({
+            id: t.id,
+            groupId: t.group_id,
+            amount: t.amount,
+            currency: t.currency,
+            originalAmount: t.original_amount,
+            originalCurrency: t.original_currency,
+            exchangeRate: t.exchange_rate,
+            merchant: t.merchant,
+            date: t.date,
+            time: t.time,
+            category: t.category,
+            type: t.type as TransactionType,
+            account: t.account,
+            accountId: t.account_id,
+            rawText: t.raw_text,
+            tags: t.tags,
+            parsedMeta: t.parsed_meta,
+            isTransfer: t.is_transfer
+          })));
         }
       }
 
@@ -750,6 +854,7 @@ const App: React.FC = () => {
             settings={settings}
             onUpdateSettings={handleUpdateSettings}
             onBack={() => setCurrentView('dashboard')}
+            transactions={transactions}
           />
         );
       default:

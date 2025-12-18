@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
-import { AppSettings, Category, Account, AccountType, RecurringRule, TransactionType } from '../types';
+import { AppSettings, Category, Account, AccountType, RecurringRule, TransactionType, Transaction } from '../types';
 import { Plus, X, Save, Trash2, RotateCcw, CreditCard, Wallet, Building2, Banknote, Tag, ArrowRight, RefreshCw } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 
 interface SettingsViewProps {
   settings: AppSettings;
-  onUpdateSettings: (settings: AppSettings) => void;
+  onUpdateSettings: (settings: AppSettings, accountReplacements?: { newAccountId: string, replaceAccountId: string | 'ORPHANS' }[]) => void;
   onBack: () => void;
+  transactions?: Transaction[]; // Optional: for showing orphan count
 }
 
 const DEFAULT_COLORS = [
@@ -17,22 +18,27 @@ const DEFAULT_COLORS = [
 
 const ACCOUNT_TYPES: AccountType[] = ['Bank', 'Credit Card', 'Cash', 'Wallet', 'Other'];
 
-const SettingsView: React.FC<SettingsViewProps> = ({ settings, onUpdateSettings, onBack }) => {
+const SettingsView: React.FC<SettingsViewProps> = ({ settings, onUpdateSettings, onBack, transactions }) => {
   const [localSettings, setLocalSettings] = useState<AppSettings>(JSON.parse(JSON.stringify(settings)));
-  const [activeTab, setActiveTab] = useState<'general' | 'categories' | 'accounts' | 'rules'>('general');
-  
+  const [activeTab, setActiveTab] = useState<'general' | 'categories' | 'accounts' | 'rules' | 'developer'>('general');
+
   // Category State
   const [newCategoryName, setNewCategoryName] = useState('');
 
   // Account State
   const [editingAccount, setEditingAccount] = useState<Partial<Account> | null>(null);
+  const [replacingAccountId, setReplacingAccountId] = useState<string | 'ORPHANS' | null>(null); // Track account replacement
+  const [accountReplacements, setAccountReplacements] = useState<{ newAccountId: string, replaceAccountId: string | 'ORPHANS' }[]>([]);
 
   // Rule State
-  const [newRule, setNewRule] = useState<Partial<RecurringRule>>({ 
-    merchantKeyword: '', 
+  const [newRule, setNewRule] = useState<Partial<RecurringRule>>({
+    merchantKeyword: '',
     category: '',
-    type: TransactionType.EXPENSE 
+    type: TransactionType.EXPENSE
   });
+
+  // Calculate orphaned transactions count
+  const orphanedTransactionsCount = transactions?.filter(t => !t.accountId).length || 0;
 
   // --- Category Handlers ---
   const handleAddCategory = () => {
@@ -55,16 +61,19 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, onUpdateSettings,
   // --- Account Handlers ---
   const handleSaveAccount = () => {
     if (!editingAccount || !editingAccount.name?.trim()) return;
-    
+
+    let savedAccountId: string | null = null;
+
     setLocalSettings(prev => {
       const newAccounts = [...prev.accounts];
-      
+
       if (editingAccount.id) {
         // Update existing
         const index = newAccounts.findIndex(a => a.id === editingAccount.id);
         if (index !== -1) {
           newAccounts[index] = { ...newAccounts[index], ...editingAccount } as Account;
         }
+        savedAccountId = editingAccount.id;
       } else {
         // Create new
         const newAcc: Account = {
@@ -81,10 +90,18 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, onUpdateSettings,
           autoUpdateBalance: editingAccount.autoUpdateBalance ?? true,
         };
         newAccounts.push(newAcc);
+        savedAccountId = newAcc.id;
       }
       return { ...prev, accounts: newAccounts };
     });
+
+    // Track account replacement if selected
+    if (replacingAccountId && savedAccountId) {
+      setAccountReplacements(prev => [...prev, { newAccountId: savedAccountId!, replaceAccountId: replacingAccountId }]);
+    }
+
     setEditingAccount(null);
+    setReplacingAccountId(null);
   };
 
   const handleEditAccount = (acc: Account) => {
@@ -99,6 +116,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, onUpdateSettings,
         balance: 0,
         autoUpdateBalance: true,
      });
+     setReplacingAccountId(null); // Reset replacement selection
   };
 
   const handleDeleteAccount = (id: string) => {
@@ -128,7 +146,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, onUpdateSettings,
   };
 
   const handleSave = () => {
-    onUpdateSettings(localSettings);
+    onUpdateSettings(localSettings, accountReplacements.length > 0 ? accountReplacements : undefined);
     onBack();
   };
 
@@ -156,7 +174,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, onUpdateSettings,
 
       {/* Tabs */}
       <div className="flex p-2 bg-white border-b border-slate-100 gap-2 overflow-x-auto">
-        {(['general', 'categories', 'accounts', 'rules'] as const).map(tab => (
+        {(['general', 'categories', 'accounts', 'rules', 'developer'] as const).map(tab => (
            <button
              key={tab}
              onClick={() => setActiveTab(tab)}
@@ -288,9 +306,76 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, onUpdateSettings,
                  </div>
                ))}
              </div>
+
+             {/* Orphaned Transactions Section */}
+             {orphanedTransactionsCount > 0 && transactions && (
+               <div className="mt-6">
+                 <div className="flex items-center justify-between mb-3">
+                   <h3 className="text-sm font-bold text-orange-600 uppercase tracking-wider">
+                     ⚠️ Orphaned Transactions ({orphanedTransactionsCount})
+                   </h3>
+                 </div>
+
+                 <div className="bg-orange-50 rounded-xl shadow-sm border border-orange-200 p-4">
+                   <p className="text-xs text-orange-700 mb-4">
+                     These transactions have no linked account. Reassign them to an account below.
+                   </p>
+
+                   {/* Bulk Reassign */}
+                   <div className="flex gap-2 mb-4">
+                     <select
+                       className="flex-1 p-2.5 bg-white border border-orange-200 rounded-lg text-sm"
+                       value=""
+                       onChange={(e) => {
+                         if (e.target.value && window.confirm(`Reassign all ${orphanedTransactionsCount} orphaned transactions to this account?`)) {
+                           const targetAccountId = e.target.value;
+                           setAccountReplacements(prev => [...prev, { newAccountId: targetAccountId, replaceAccountId: 'ORPHANS' }]);
+                           // Trigger save
+                           setTimeout(() => {
+                             onUpdateSettings(localSettings, [{ newAccountId: targetAccountId, replaceAccountId: 'ORPHANS' }]);
+                           }, 100);
+                         }
+                       }}
+                     >
+                       <option value="">Select account to reassign all...</option>
+                       {localSettings.accounts.map(acc => (
+                         <option key={acc.id} value={acc.id}>
+                           {acc.name} ({acc.last4Digits || 'No digits'})
+                         </option>
+                       ))}
+                     </select>
+                   </div>
+
+                   {/* Show recent orphaned transactions */}
+                   <div className="space-y-2 max-h-60 overflow-y-auto">
+                     {transactions
+                       .filter(t => !t.accountId)
+                       .slice(0, 10)
+                       .map(t => (
+                         <div key={t.id} className="bg-white p-3 rounded-lg border border-orange-100 text-xs">
+                           <div className="flex justify-between items-start">
+                             <div>
+                               <div className="font-bold text-slate-800">{t.merchant}</div>
+                               <div className="text-slate-500">{t.date} • {t.category}</div>
+                             </div>
+                             <div className="font-mono font-bold text-slate-700">
+                               ${t.amount.toFixed(2)}
+                             </div>
+                           </div>
+                         </div>
+                       ))}
+                     {orphanedTransactionsCount > 10 && (
+                       <div className="text-center text-xs text-orange-600 mt-2">
+                         + {orphanedTransactionsCount - 10} more transactions
+                       </div>
+                     )}
+                   </div>
+                 </div>
+               </div>
+             )}
           </section>
         )}
-        
+
         {/* Parsing Rules Tab */}
         {activeTab === 'rules' && (
           <section className="animate-in fade-in slide-in-from-right-4 duration-300">
@@ -374,6 +459,90 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, onUpdateSettings,
              </div>
           </section>
         )}
+
+        {/* Developer Tab */}
+        {activeTab === 'developer' && (
+          <section className="animate-in fade-in slide-in-from-right-4 duration-300">
+            <div className="mb-4 bg-red-50 p-4 rounded-xl border border-red-200 text-xs text-red-700">
+              <p className="font-bold mb-1">⚠️ Developer Tools - Use with Caution</p>
+              <p>These actions are irreversible. Make sure you have backups before proceeding.</p>
+            </div>
+
+            <div className="space-y-4">
+              {/* Soft Reset */}
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <h4 className="font-bold text-slate-800 mb-1">Soft Reset</h4>
+                    <p className="text-xs text-slate-500">Delete all transactions and reset account balances to 0. Keeps accounts, categories, and rules.</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    if (window.confirm('⚠️ This will DELETE ALL transactions and reset account balances to 0. This cannot be undone. Are you sure?')) {
+                      onUpdateSettings({ ...localSettings, __resetTransactions: true } as any);
+                    }
+                  }}
+                  className="w-full px-4 py-3 bg-orange-500 text-white rounded-lg font-bold hover:bg-orange-600 transition-colors"
+                >
+                  Reset Transactions & Balances
+                </button>
+              </div>
+
+              {/* Hard Reset */}
+              <div className="bg-white rounded-xl shadow-sm border border-red-300 p-5">
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <h4 className="font-bold text-red-600 mb-1">Hard Reset (Factory Reset)</h4>
+                    <p className="text-xs text-slate-500">Delete ALL data including transactions, accounts, categories, and rules. Resets to default state.</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    const confirmation = window.prompt('⚠️ DANGER: This will DELETE ALL YOUR DATA! Type "DELETE EVERYTHING" to confirm:');
+                    if (confirmation === 'DELETE EVERYTHING') {
+                      onUpdateSettings({ ...localSettings, __resetToDefault: true } as any);
+                    } else if (confirmation) {
+                      alert('Confirmation text did not match. Reset cancelled.');
+                    }
+                  }}
+                  className="w-full px-4 py-3 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700 transition-colors"
+                >
+                  Factory Reset (Delete Everything)
+                </button>
+              </div>
+
+              {/* Database Info */}
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+                <h4 className="font-bold text-slate-800 mb-3">Database Stats</h4>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div className="p-3 bg-slate-50 rounded-lg">
+                    <div className="text-xs text-slate-500 mb-1">Transactions</div>
+                    <div className="font-bold text-slate-800">{transactions?.length || 0}</div>
+                  </div>
+                  <div className="p-3 bg-slate-50 rounded-lg">
+                    <div className="text-xs text-slate-500 mb-1">Accounts</div>
+                    <div className="font-bold text-slate-800">{localSettings.accounts.length}</div>
+                  </div>
+                  <div className="p-3 bg-slate-50 rounded-lg">
+                    <div className="text-xs text-slate-500 mb-1">Categories</div>
+                    <div className="font-bold text-slate-800">{localSettings.categories.length}</div>
+                  </div>
+                  <div className="p-3 bg-slate-50 rounded-lg">
+                    <div className="text-xs text-slate-500 mb-1">Rules</div>
+                    <div className="font-bold text-slate-800">{localSettings.recurringRules.length}</div>
+                  </div>
+                  {orphanedTransactionsCount > 0 && (
+                    <div className="p-3 bg-orange-50 rounded-lg border border-orange-200 col-span-2">
+                      <div className="text-xs text-orange-600 mb-1">Orphaned Transactions</div>
+                      <div className="font-bold text-orange-700">{orphanedTransactionsCount}</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
       </div>
 
       {/* Account Edit Modal - Super Light Backdrop */}
@@ -437,13 +606,36 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, onUpdateSettings,
                       <div className="text-xs font-bold text-slate-700">Auto-update Balance</div>
                       <div className="text-[10px] text-slate-400">Update balance from SMS/Text automatically</div>
                     </div>
-                    <button 
+                    <button
                       onClick={() => setEditingAccount(prev => ({ ...prev!, autoUpdateBalance: !prev!.autoUpdateBalance }))}
                       className={`relative w-10 h-5 rounded-full transition-colors duration-200 ${editingAccount.autoUpdateBalance ? 'bg-brand-500' : 'bg-slate-300'}`}
                     >
                       <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 ${editingAccount.autoUpdateBalance ? 'translate-x-5' : 'translate-x-0'}`} />
                     </button>
                  </div>
+
+                 {/* Account Replacement Section - Only for new accounts */}
+                 {!editingAccount.id && (settings.accounts.length > 0 || orphanedTransactionsCount > 0) && (
+                   <div className="p-3 bg-teal-50 rounded-xl border border-teal-100">
+                     <div className="text-xs font-bold text-teal-700 mb-2">🔄 Replace Old Account?</div>
+                     <div className="text-[10px] text-teal-600 mb-3">Link existing transactions to this new account</div>
+                     <select
+                       value={replacingAccountId || ''}
+                       onChange={(e) => setReplacingAccountId(e.target.value || null)}
+                       className="w-full p-2.5 bg-white border border-teal-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                     >
+                       <option value="">No - This is a new account</option>
+                       {orphanedTransactionsCount > 0 && (
+                         <option value="ORPHANS">Orphaned Transactions Only ({orphanedTransactionsCount})</option>
+                       )}
+                       {settings.accounts.map(acc => (
+                         <option key={acc.id} value={acc.id}>
+                           Replace: {acc.name} ({acc.last4Digits || 'No digits'})
+                         </option>
+                       ))}
+                     </select>
+                   </div>
+                 )}
 
                  <div className="pt-4 border-t border-slate-100">
                     <h5 className="text-xs font-bold text-brand-600 mb-3 uppercase tracking-wider">Limits & Alerts</h5>

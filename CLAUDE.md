@@ -155,7 +155,12 @@ This dual approach handles both:
 - `PlanningView.tsx` - Budget planning and savings goals
 - `CategoriesView.tsx` - Dedicated category management
 - `WarrantiesView.tsx` - Warranty tracking with receipt images
-- `SettingsView.tsx` - Categories, accounts, recurring rules config
+- `SettingsView.tsx` - Multi-tab settings (General, Categories, Accounts, Rules, **Developer**)
+  - General: Base currency preferences
+  - Categories: Add/edit/delete categories
+  - Accounts: Manage accounts + **Orphaned Transactions Manager**
+  - Rules: Recurring transaction parsing rules
+  - **Developer**: Soft reset, hard reset, database stats
 - `EditTransactionModal.tsx` - Edit/delete/create recurring rules
 - `Auth.tsx` - Authentication with sign in/sign up/forgot password
 - `ResetPassword.tsx` - Password reset page
@@ -198,10 +203,43 @@ All settings updates go through `App.tsx:handleUpdateSettings()` which:
 - Syncs categories, accounts, and recurring rules to Supabase
 - Handles inserts, updates, and deletes
 - Maintains data integrity across refreshes
+- **Auto-links orphaned transactions** when accounts are created/updated (App.tsx:537-566)
+- **Handles account replacements** for bulk transaction reassignment (App.tsx:568-621)
+
+### Transaction Linking System (Comprehensive)
+
+**Three-Phase System for Managing Account-Transaction Relationships:**
+
+#### Phase 1: Auto-Link by last4Digits (App.tsx:537-566)
+- Automatically runs when any account is created or updated
+- Finds orphaned transactions (accountId = NULL)
+- Matches transactions where `account` field (raw SMS text) contains the last4Digits
+- Automatically updates `accountId` to link transactions
+- **Use case**: Recover transactions after accidentally deleting an account
+
+#### Phase 2: Account Replacement Flow (SettingsView.tsx:466-487, App.tsx:568-621)
+- When creating a NEW account, user can select:
+  - "Orphaned Transactions Only" - Link all orphaned transactions
+  - "Replace: [Account Name]" - Transfer all transactions from old account to new
+- Perfect for switching banks or getting new card with different last4Digits
+- Bulk updates all transactions in one operation
+- **Use case**: Changed bank accounts, new credit card number
+
+#### Phase 3: Orphaned Transactions Manager (SettingsView.tsx:310-375)
+- Dedicated section in Settings → Accounts tab
+- Shows count and list of orphaned transactions
+- Dropdown to bulk-reassign all orphans to any account
+- Real-time reassignment with confirmation
+- **Use case**: Fix orphaned transactions from any source
+
+**Database Constraint**: `account_id UUID REFERENCES accounts(id) ON DELETE SET NULL`
+- When an account is deleted, transactions are preserved but `account_id` is set to NULL
+- This prevents data loss but creates "orphaned" transactions
+- The Transaction Linking System recovers these orphaned transactions
 
 ### Account Balance Reconciliation
 
-When editing/deleting transactions, balances are NOT automatically adjusted backward. Users must manually correct account balances via Settings if needed. This is a known simplification.
+When editing/deleting transactions, balances are NOT automatically adjusted backward. Users must manually correct account balances via Settings or use Developer → Soft Reset if needed.
 
 ### Currency Handling
 
@@ -223,6 +261,40 @@ Not automatic triggers - they're hints to the AI parser (geminiService.ts:54-57)
 - Forgot password flow with email reset link
 - Password reset page at `/reset-password` route
 - Row Level Security ensures user data isolation
+
+### Developer Settings (Settings → Developer Tab)
+
+**Location**: SettingsView.tsx:463-545, App.tsx:450-487
+
+Comprehensive developer tools for testing and data management:
+
+#### Soft Reset
+- **Button**: "Reset Transactions & Balances"
+- **Action**: Deletes all transactions + resets all account balances to 0
+- **Keeps**: Accounts, categories, recurring rules
+- **Use case**: Clean slate for testing without losing configuration
+- **Implementation**: App.tsx:450-473
+  - Deletes all transactions from database
+  - Resets all account balances to 0
+  - Reloads user data to refresh UI
+
+#### Hard Reset (Factory Reset)
+- **Button**: "Factory Reset (Delete Everything)"
+- **Action**: Deletes ALL user data (transactions, accounts, categories, rules)
+- **Resets**: App to default state with default categories
+- **Confirmation**: Requires typing "DELETE EVERYTHING"
+- **Use case**: Complete reset for new user or major testing
+- **Implementation**: App.tsx:475-487
+
+#### Database Stats
+- Real-time counters for:
+  - Total transactions
+  - Total accounts
+  - Total categories
+  - Total recurring rules
+  - Orphaned transactions (highlighted in orange if > 0)
+
+**Security**: All reset functions require explicit confirmation dialogs to prevent accidental data loss.
 
 ## Utilities
 
