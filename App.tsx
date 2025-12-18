@@ -241,6 +241,28 @@ const App: React.FC = () => {
     }
   };
 
+  // Helper: Check if transaction should update balance (compare to most recent transaction)
+  const shouldUpdateBalance = (transaction: Transaction, accountId: string): boolean => {
+    // Find most recent transaction for this account
+    const accountTransactions = transactions.filter(t => t.accountId === accountId);
+
+    // If no existing transactions for this account, always update
+    if (accountTransactions.length === 0) return true;
+
+    // Find the most recent transaction date
+    const mostRecentTxn = accountTransactions.reduce((latest, current) => {
+      const latestDateTime = `${latest.date} ${latest.time || '00:00'}`;
+      const currentDateTime = `${current.date} ${current.time || '00:00'}`;
+      return currentDateTime > latestDateTime ? current : latest;
+    });
+
+    const mostRecentDateTime = `${mostRecentTxn.date} ${mostRecentTxn.time || '00:00'}`;
+    const newTxnDateTime = `${transaction.date} ${transaction.time || '00:00'}`;
+
+    // Update balance only if new transaction is >= most recent
+    return newTxnDateTime >= mostRecentDateTime;
+  };
+
   const handleAddTransactions = async (newTransactions: Transaction[]) => {
     try {
       const userId = session?.user?.id;
@@ -283,26 +305,32 @@ const App: React.FC = () => {
 
         if (accIndex !== -1) {
           const acc = updatedAccounts[accIndex];
-          let balanceUpdatedViaSnapshot = false;
 
-          if (acc.autoUpdateBalance !== false && t.parsedMeta) {
-            if (t.parsedMeta.availableCredit !== undefined && acc.totalCreditLimit) {
-              acc.balance = -(acc.totalCreditLimit - t.parsedMeta.availableCredit);
-              balanceUpdatedViaSnapshot = true;
-            } else if (t.parsedMeta.availableBalance !== undefined) {
-              acc.balance = t.parsedMeta.availableBalance;
-              balanceUpdatedViaSnapshot = true;
-            }
-          }
+          // Smart balance update: Only update if transaction is recent
+          const shouldUpdate = shouldUpdateBalance(t, t.accountId!);
 
-          if (!balanceUpdatedViaSnapshot) {
-            if (t.type === TransactionType.EXPENSE) {
-              acc.balance -= t.amount;
-            } else if (t.type === TransactionType.INCOME) {
-              acc.balance += t.amount;
+          if (shouldUpdate) {
+            let balanceUpdatedViaSnapshot = false;
+
+            if (acc.autoUpdateBalance !== false && t.parsedMeta) {
+              if (t.parsedMeta.availableCredit !== undefined && acc.totalCreditLimit) {
+                acc.balance = -(acc.totalCreditLimit - t.parsedMeta.availableCredit);
+                balanceUpdatedViaSnapshot = true;
+              } else if (t.parsedMeta.availableBalance !== undefined) {
+                acc.balance = t.parsedMeta.availableBalance;
+                balanceUpdatedViaSnapshot = true;
+              }
             }
+
+            if (!balanceUpdatedViaSnapshot) {
+              if (t.type === TransactionType.EXPENSE) {
+                acc.balance -= t.amount;
+              } else if (t.type === TransactionType.INCOME) {
+                acc.balance += t.amount;
+              }
+            }
+            accountsChanged = true;
           }
-          accountsChanged = true;
         }
       });
 

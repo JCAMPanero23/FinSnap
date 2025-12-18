@@ -1,7 +1,7 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend } from 'recharts';
 import { Transaction, TransactionType, Account } from '../types';
-import { TrendingUp, TrendingDown, Wallet, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
+import { TrendingUp, TrendingDown, Wallet, Calendar, ChevronLeft, ChevronRight, CreditCard } from 'lucide-react';
 
 interface DashboardProps {
   transactions: Transaction[];
@@ -34,9 +34,31 @@ const Dashboard: React.FC<DashboardProps> = ({
   onNextPeriod,
   currentPeriodLabel
 }) => {
+  // Dashboard view filter state
+  const [viewFilter, setViewFilter] = useState<'all' | 'cash' | 'credit' | 'debt'>('all');
 
   // Use base currency from settings
   const displayCurrency = baseCurrency;
+
+  // Filter transactions based on view filter
+  const filteredByPayment = useMemo(() => {
+    if (viewFilter === 'all') return transactions;
+    if (viewFilter === 'debt') return []; // Debt overview doesn't show in regular stats
+
+    return transactions.filter(t => {
+      const account = accounts.find(a => a.id === t.accountId);
+      if (!account) return false;
+
+      if (viewFilter === 'cash') {
+        // Cash payments: expenses from non-credit card accounts
+        return t.type === TransactionType.EXPENSE && account.type !== 'Credit Card';
+      } else if (viewFilter === 'credit') {
+        // Credit card payments: expenses from credit card accounts
+        return t.type === TransactionType.EXPENSE && account.type === 'Credit Card';
+      }
+      return true;
+    });
+  }, [transactions, accounts, viewFilter]);
 
   // Calculate Net Worth from Accounts
   const totalNetWorth = useMemo(() => {
@@ -47,8 +69,8 @@ const Dashboard: React.FC<DashboardProps> = ({
   const summary = useMemo(() => {
     let income = 0;
     let expense = 0;
-    
-    transactions.forEach(t => {
+
+    filteredByPayment.forEach(t => {
       if (t.type === TransactionType.INCOME) income += t.amount;
       else expense += t.amount;
     });
@@ -57,20 +79,42 @@ const Dashboard: React.FC<DashboardProps> = ({
       income,
       expense
     };
-  }, [transactions]);
+  }, [filteredByPayment]);
 
   const categoryData = useMemo(() => {
     const categories: Record<string, number> = {};
-    transactions
+    filteredByPayment
       .filter(t => t.type === TransactionType.EXPENSE)
       .forEach(t => {
         categories[t.category] = (categories[t.category] || 0) + t.amount;
       });
-    
+
     return Object.entries(categories)
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value); // Sort desc
-  }, [transactions]);
+  }, [filteredByPayment]);
+
+  // Calculate total debt from credit card accounts
+  const totalDebt = useMemo(() => {
+    return accounts
+      .filter(a => a.type === 'Credit Card' && a.balance < 0)
+      .reduce((sum, acc) => sum + Math.abs(acc.balance), 0);
+  }, [accounts]);
+
+  // Get credit card accounts for debt overview
+  const creditCardAccounts = useMemo(() => {
+    return accounts.filter(a => a.type === 'Credit Card');
+  }, [accounts]);
+
+  // Get recent credit card transactions
+  const recentCreditTransactions = useMemo(() => {
+    return transactions
+      .filter(t => {
+        const account = accounts.find(a => a.id === t.accountId);
+        return account?.type === 'Credit Card';
+      })
+      .slice(0, 10);
+  }, [transactions, accounts]);
 
   const monthlyData = useMemo(() => {
     const months: Record<string, { name: string; income: number; expense: number }> = {};
@@ -170,6 +214,143 @@ const Dashboard: React.FC<DashboardProps> = ({
         )}
       </div>
 
+      {/* View Filter Tabs */}
+      <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
+        <div className="flex items-center gap-2 mb-3">
+          <Wallet size={16} className="text-brand-600" />
+          <h3 className="text-sm font-bold text-slate-700">View</h3>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            onClick={() => setViewFilter('all')}
+            className={`px-3 py-2 rounded-lg text-xs font-bold transition-all ${
+              viewFilter === 'all'
+                ? 'bg-brand-600 text-white shadow-md'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            All Spending
+          </button>
+          <button
+            onClick={() => setViewFilter('cash')}
+            className={`px-3 py-2 rounded-lg text-xs font-bold transition-all ${
+              viewFilter === 'cash'
+                ? 'bg-brand-600 text-white shadow-md'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            Cash Only
+          </button>
+          <button
+            onClick={() => setViewFilter('credit')}
+            className={`px-3 py-2 rounded-lg text-xs font-bold transition-all ${
+              viewFilter === 'credit'
+                ? 'bg-brand-600 text-white shadow-md'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            Credit Only
+          </button>
+          <button
+            onClick={() => setViewFilter('debt')}
+            className={`px-3 py-2 rounded-lg text-xs font-bold transition-all ${
+              viewFilter === 'debt'
+                ? 'bg-orange-600 text-white shadow-md'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            Debt Overview
+          </button>
+        </div>
+      </div>
+
+      {/* Debt Overview Section */}
+      {viewFilter === 'debt' && (
+        <div className="space-y-4">
+          <div className="bg-gradient-to-br from-orange-500 to-red-500 rounded-2xl p-6 text-white shadow-lg">
+            <h2 className="text-sm font-bold opacity-90 mb-1">Total Debt</h2>
+            <div className="text-3xl font-bold">{displayCurrency} {totalDebt.toFixed(2)}</div>
+          </div>
+
+          <div className="space-y-3">
+            {creditCardAccounts.map(acc => {
+              const balance = Math.abs(acc.balance);
+              const available = acc.totalCreditLimit ? acc.totalCreditLimit - balance : 0;
+              const utilization = acc.totalCreditLimit ? (balance / acc.totalCreditLimit) * 100 : 0;
+
+              return (
+                <div key={acc.id} className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <CreditCard size={20} className="text-orange-600" />
+                      <div>
+                        <div className="font-bold text-slate-800">{acc.name}</div>
+                        {acc.last4Digits && (
+                          <div className="text-xs text-slate-400">...{acc.last4Digits}</div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className={`font-bold text-lg ${acc.balance < 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                        {acc.currency} {balance.toFixed(2)}
+                      </div>
+                      {acc.paymentDueDay && (
+                        <div className="text-xs text-slate-500">
+                          Due: Day {acc.paymentDueDay}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {acc.totalCreditLimit && (
+                    <div>
+                      <div className="flex justify-between text-xs text-slate-600 mb-1">
+                        <span>Available: {acc.currency} {available.toFixed(2)}</span>
+                        <span>Limit: {acc.currency} {acc.totalCreditLimit.toFixed(2)}</span>
+                      </div>
+                      <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                        <div
+                          className={`h-2 rounded-full transition-all ${
+                            utilization > 80 ? 'bg-red-500' : utilization > 50 ? 'bg-orange-500' : 'bg-green-500'
+                          }`}
+                          style={{ width: `${Math.min(utilization, 100)}%` }}
+                        />
+                      </div>
+                      <div className="text-xs text-slate-500 mt-1 text-center">
+                        {utilization.toFixed(1)}% utilization
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {recentCreditTransactions.length > 0 && (
+            <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
+              <h3 className="font-bold text-slate-800 mb-3">Recent Credit Card Transactions</h3>
+              <div className="space-y-2">
+                {recentCreditTransactions.map(t => (
+                  <div key={t.id} className="flex justify-between items-center py-2 border-b border-slate-100 last:border-0">
+                    <div>
+                      <div className="font-medium text-slate-800 text-sm">{t.merchant}</div>
+                      <div className="text-xs text-slate-500">{t.date} • {t.category}</div>
+                    </div>
+                    <div className="font-bold text-slate-800">
+                      -{t.currency} {t.amount.toFixed(2)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Balance Card (Hidden in Debt View) */}
+      {viewFilter !== 'debt' && (
+        <>
       {/* Balance Card */}
       <div className="bg-gradient-to-br from-brand-900 to-brand-600 rounded-2xl p-6 text-white shadow-lg">
         <div className="flex items-center gap-2 mb-1 opacity-80">
@@ -296,6 +477,8 @@ const Dashboard: React.FC<DashboardProps> = ({
           ))
         )}
       </div>
+        </>
+      )}
     </div>
   );
 };

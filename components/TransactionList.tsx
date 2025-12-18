@@ -20,16 +20,30 @@ const TransactionList: React.FC<TransactionListProps> = ({
   onClearAccountFilter
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [filter, setFilter] = useState<'ALL' | 'INCOME' | 'EXPENSE'>('ALL');
+  const [filter, setFilter] = useState<'ALL' | 'INCOME' | 'CASH' | 'CREDIT'>('ALL');
 
   const filteredTransactions = useMemo(() => {
     return transactions
       .filter(t => {
-        const matchesSearch = t.merchant.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        const matchesSearch = t.merchant.toLowerCase().includes(searchTerm.toLowerCase()) ||
                               t.category.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesFilter = filter === 'ALL' || t.type === filter;
+
+        // Filter logic
+        let matchesFilter = true;
+        if (filter === 'INCOME') {
+          matchesFilter = t.type === TransactionType.INCOME;
+        } else if (filter === 'CASH') {
+          // Cash payments: expenses from non-credit card accounts
+          const account = accounts.find(a => a.id === t.accountId);
+          matchesFilter = t.type === TransactionType.EXPENSE && account?.type !== 'Credit Card';
+        } else if (filter === 'CREDIT') {
+          // Credit card payments: expenses from credit card accounts
+          const account = accounts.find(a => a.id === t.accountId);
+          matchesFilter = t.type === TransactionType.EXPENSE && account?.type === 'Credit Card';
+        }
+
         const matchesAccount = !initialFilterAccountId || t.accountId === initialFilterAccountId;
-        
+
         return matchesSearch && matchesFilter && matchesAccount;
       })
       .sort((a, b) => {
@@ -85,14 +99,28 @@ const TransactionList: React.FC<TransactionListProps> = ({
               className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
             />
           </div>
-          <button 
-            onClick={() => setFilter(prev => prev === 'ALL' ? 'EXPENSE' : prev === 'EXPENSE' ? 'INCOME' : 'ALL')}
-            className={`px-3 py-2 rounded-xl border border-slate-200 bg-white flex items-center gap-2 text-sm font-medium transition-colors ${filter !== 'ALL' ? 'text-brand-600 border-brand-200 bg-brand-50' : 'text-slate-600'}`}
-          >
-            <Filter size={16} />
-            {filter === 'ALL' ? 'All' : filter === 'EXPENSE' ? 'Expense' : 'Income'}
-          </button>
         </div>
+
+        {/* Filter Dropdown */}
+        <div className="flex items-center gap-2 mb-3">
+          <Filter size={14} className="text-slate-400" />
+          <select
+            value={filter}
+            onChange={(e) => setFilter(e.target.value as 'ALL' | 'INCOME' | 'CASH' | 'CREDIT')}
+            className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-500 appearance-none"
+          >
+            <option value="ALL">All Transactions</option>
+            <option value="CASH">Cash Payments</option>
+            <option value="CREDIT">Credit Card</option>
+            <option value="INCOME">Income Only</option>
+          </select>
+        </div>
+
+        {filteredTransactions.length > 0 && filteredTransactions.length !== transactions.length && (
+          <div className="text-xs text-slate-500 text-center mb-2">
+            Showing {filteredTransactions.length} of {transactions.length} transactions
+          </div>
+        )}
       </div>
 
       <div className="space-y-6">

@@ -23,6 +23,7 @@ const AddTransaction: React.FC<AddTransactionProps> = ({ onAdd, onCancel, settin
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Manual Mode State
+  const [manualType, setManualType] = useState<TransactionType>(TransactionType.EXPENSE);
   const [manualAmount, setManualAmount] = useState('');
   const [manualMerchant, setManualMerchant] = useState('Cash');
   const [manualCategory, setManualCategory] = useState(settings.categories[0]?.name || 'Other');
@@ -149,7 +150,7 @@ const AddTransaction: React.FC<AddTransactionProps> = ({ onAdd, onCancel, settin
       category: manualCategory,
       date: manualDate,
       time: manualTime,
-      type: TransactionType.EXPENSE,
+      type: manualType,
       accountId: manualAccount || undefined,
       account: accName,
       rawText: 'Manual Entry'
@@ -335,6 +336,30 @@ const AddTransaction: React.FC<AddTransactionProps> = ({ onAdd, onCancel, settin
       {mode === 'manual' && (
         <div className="flex-1 flex flex-col animate-in fade-in slide-in-from-left-4 duration-300">
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 space-y-4">
+             {/* Transaction Type Toggle */}
+             <div className="flex gap-2 mb-2">
+               <button
+                 onClick={() => setManualType(TransactionType.EXPENSE)}
+                 className={`flex-1 py-2 px-4 rounded-lg text-sm font-bold transition-all ${
+                   manualType === TransactionType.EXPENSE
+                     ? 'bg-brand-600 text-white shadow-md'
+                     : 'bg-slate-100 text-slate-500'
+                 }`}
+               >
+                 Expense
+               </button>
+               <button
+                 onClick={() => setManualType(TransactionType.INCOME)}
+                 className={`flex-1 py-2 px-4 rounded-lg text-sm font-bold transition-all ${
+                   manualType === TransactionType.INCOME
+                     ? 'bg-green-600 text-white shadow-md'
+                     : 'bg-slate-100 text-slate-500'
+                 }`}
+               >
+                 Income
+               </button>
+             </div>
+
              <div>
                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">Amount</label>
                <div className="relative">
@@ -406,12 +431,16 @@ const AddTransaction: React.FC<AddTransactionProps> = ({ onAdd, onCancel, settin
 
           <div className="flex gap-3 pb-24 mt-6">
              <button onClick={onCancel} className="py-4 px-6 rounded-xl font-semibold text-slate-500 hover:bg-slate-100 transition-colors">Cancel</button>
-             <button 
+             <button
                onClick={handleManualSubmit}
                disabled={!manualAmount}
-               className="flex-1 py-4 rounded-xl font-bold text-white bg-brand-600 shadow-lg shadow-brand-500/20 active:scale-95 transition-transform disabled:opacity-50"
+               className={`flex-1 py-4 rounded-xl font-bold text-white shadow-lg active:scale-95 transition-transform disabled:opacity-50 ${
+                 manualType === TransactionType.INCOME
+                   ? 'bg-green-600 shadow-green-500/20'
+                   : 'bg-brand-600 shadow-brand-500/20'
+               }`}
              >
-               Add Expense
+               {manualType === TransactionType.INCOME ? 'Add Income' : 'Add Expense'}
              </button>
           </div>
         </div>
