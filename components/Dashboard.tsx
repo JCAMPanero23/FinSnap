@@ -18,7 +18,8 @@ interface DashboardProps {
   currentPeriodLabel: string;
 }
 
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658'];
+// Neo-Brutalist Color Palette for Charts
+const COLORS = ['#BFFF00', '#FF006E', '#00F5FF', '#FFD600', '#000000', '#808080', '#FFFFFF'];
 
 const Dashboard: React.FC<DashboardProps> = ({
   transactions,
@@ -104,123 +105,129 @@ const Dashboard: React.FC<DashboardProps> = ({
     .slice(0, 5);
 
   return (
-    <div className="space-y-6 pb-24">
-      {/* Date Filter */}
-      <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
-        <div className="flex items-center gap-2 mb-3">
-          <Calendar size={16} className="text-brand-600" />
-          <h3 className="text-sm font-bold text-slate-700">Filter Period</h3>
+    <div className="space-y-6 pb-24 animate-slide-up">
+      {/* Date Filter - Brutalist Style */}
+      <div className="bg-white border-3 border-black shadow-brutal-md p-4 animate-slide-up stagger-1">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="p-2 bg-lime border-2 border-black">
+            <Calendar size={18} className="text-black" />
+          </div>
+          <h3 className="text-sm font-display font-bold text-black uppercase tracking-wider">Period</h3>
         </div>
 
         <div className="flex flex-wrap gap-2 mb-3">
-          {(['all', 'month', 'year', 'week', 'custom'] as const).map((filter) => (
+          {(['all', 'month', 'year', 'week', 'custom'] as const).map((filter, idx) => (
             <button
               key={filter}
               onClick={() => onDateFilterChange(filter)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+              className={`px-4 py-2 border-3 border-black font-display font-bold text-xs uppercase tracking-wide transition-all duration-150 ${
                 dateFilter === filter
-                  ? 'bg-brand-600 text-white shadow-sm'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  ? 'bg-lime text-black shadow-brutal-sm translate-x-0 translate-y-0'
+                  : 'bg-white text-black hover:bg-near-white hover:translate-x-[-2px] hover:translate-y-[-2px] hover:shadow-brutal-sm'
               }`}
             >
-              {filter === 'all' ? 'All Time' : filter.charAt(0).toUpperCase() + filter.slice(1)}
+              {filter === 'all' ? 'All' : filter}
             </button>
           ))}
         </div>
 
         {/* Navigation Controls for Month/Year/Week */}
         {(dateFilter === 'month' || dateFilter === 'year' || dateFilter === 'week') && (
-          <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+          <div className="flex items-center justify-between pt-3 border-t-3 border-black mt-3">
             <button
               onClick={onPreviousPeriod}
-              className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-600 hover:text-brand-600"
+              className="p-2 border-2 border-black hover:bg-lime hover:shadow-brutal-sm hover:translate-x-[-2px] hover:translate-y-[-2px] transition-all duration-150"
               title="Previous"
             >
-              <ChevronLeft size={20} />
+              <ChevronLeft size={20} className="text-black" />
             </button>
-            <div className="text-sm font-semibold text-slate-700 text-center flex-1">
+            <div className="text-sm font-mono font-bold text-black text-center flex-1 uppercase tracking-wider">
               {currentPeriodLabel}
             </div>
             <button
               onClick={onNextPeriod}
-              className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-600 hover:text-brand-600"
+              className="p-2 border-2 border-black hover:bg-lime hover:shadow-brutal-sm hover:translate-x-[-2px] hover:translate-y-[-2px] transition-all duration-150"
               title="Next"
             >
-              <ChevronRight size={20} />
+              <ChevronRight size={20} className="text-black" />
             </button>
           </div>
         )}
 
         {dateFilter === 'custom' && (
-          <div className="flex gap-2 items-center pt-2 border-t border-slate-100">
+          <div className="flex gap-2 items-center pt-3 border-t-3 border-black mt-3">
             <input
               type="date"
               value={customStartDate}
               onChange={(e) => onCustomStartDateChange(e.target.value)}
-              className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-brand-500 outline-none"
+              className="flex-1 px-3 py-2 bg-white border-3 border-black text-xs font-mono focus:outline-none focus:shadow-[0_0_0_3px_#BFFF00]"
             />
-            <span className="text-slate-400 text-xs">to</span>
+            <span className="text-black text-xs font-bold">→</span>
             <input
               type="date"
               value={customEndDate}
               onChange={(e) => onCustomEndDateChange(e.target.value)}
-              className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-brand-500 outline-none"
+              className="flex-1 px-3 py-2 bg-white border-3 border-black text-xs font-mono focus:outline-none focus:shadow-[0_0_0_3px_#BFFF00]"
             />
           </div>
         )}
       </div>
 
-      {/* Balance Card */}
-      <div className="bg-gradient-to-br from-brand-900 to-brand-600 rounded-2xl p-6 text-white shadow-lg">
-        <div className="flex items-center gap-2 mb-1 opacity-80">
-          <Wallet size={16} />
-          <h2 className="text-sm font-medium">Total Net Worth</h2>
+      {/* Balance Card - Hero Section */}
+      <div className="bg-black border-3 border-black shadow-brutal-lg p-6 animate-slide-up stagger-2 relative overflow-hidden">
+        {/* Accent Bar */}
+        <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-lime via-hot-pink to-electric-cyan"></div>
+
+        <div className="flex items-center gap-3 mb-2">
+          <div className="p-2 bg-lime">
+            <Wallet size={20} className="text-black" />
+          </div>
+          <h2 className="text-xs font-display font-bold text-white uppercase tracking-widest">Net Worth</h2>
         </div>
-        <div className={`text-3xl font-bold mb-6 ${totalNetWorth < 0 ? 'text-red-100' : 'text-white'}`}>
+        <div className={`text-5xl font-mono font-bold mb-8 number-display ${totalNetWorth < 0 ? 'text-hot-pink' : 'text-lime'}`}>
           {totalNetWorth < 0 ? '-' : ''}{displayCurrency} {Math.abs(totalNetWorth).toFixed(2)}
         </div>
-        
-        <div className="flex justify-between items-center bg-white/10 rounded-xl p-3 backdrop-blur-sm">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-green-500/20 rounded-full">
-              <TrendingUp className="w-5 h-5 text-green-300" />
+
+        <div className="grid grid-cols-2 gap-4">
+          <div className="bg-white border-3 border-lime p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <TrendingUp className="w-5 h-5 text-black" strokeWidth={3} />
+              <div className="text-[10px] font-display font-bold text-black uppercase tracking-wider">Income</div>
             </div>
-            <div>
-              <div className="text-xs text-brand-100">Total Income</div>
-              <div className="font-semibold text-green-300">+{summary.income.toFixed(0)}</div>
-            </div>
+            <div className="font-mono font-bold text-2xl text-black number-display">+{summary.income.toFixed(0)}</div>
           </div>
-          <div className="w-px h-8 bg-white/20 mx-2"></div>
-          <div className="flex items-center gap-3 text-right">
-            <div>
-              <div className="text-xs text-brand-100">Total Spent</div>
-              <div className="font-semibold text-red-300">-{summary.expense.toFixed(0)}</div>
+
+          <div className="bg-white border-3 border-hot-pink p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <TrendingDown className="w-5 h-5 text-black" strokeWidth={3} />
+              <div className="text-[10px] font-display font-bold text-black uppercase tracking-wider">Spent</div>
             </div>
-             <div className="p-2 bg-red-500/20 rounded-full">
-              <TrendingDown className="w-5 h-5 text-red-300" />
-            </div>
+            <div className="font-mono font-bold text-2xl text-black number-display">-{summary.expense.toFixed(0)}</div>
           </div>
         </div>
       </div>
 
       {/* Monthly Trends Chart */}
       {monthlyData.length > 0 && (
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
-           <h3 className="text-lg font-bold text-slate-800 mb-4">Monthly Trends</h3>
+        <div className="bg-white border-3 border-black shadow-brutal-md p-6 animate-slide-up stagger-3">
+          <div className="flex items-center gap-3 mb-4 pb-3 border-b-3 border-black">
+            <div className="w-1 h-8 bg-lime"></div>
+            <h3 className="text-base font-display font-bold text-black uppercase tracking-wider">Cash Flow</h3>
+          </div>
            <div className="h-[220px] w-full text-xs">
              <ResponsiveContainer width="100%" height="100%" minWidth={200} minHeight={220}>
                <BarChart data={monthlyData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
-                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b'}} />
-                 <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b'}} />
-                 <Tooltip 
-                   cursor={{fill: '#f8fafc'}}
+                 <CartesianGrid strokeDasharray="0" vertical={false} stroke="#000000" strokeWidth={1} />
+                 <XAxis dataKey="name" axisLine={{stroke: '#000', strokeWidth: 2}} tickLine={false} tick={{fill: '#000', fontFamily: 'JetBrains Mono', fontWeight: 600}} />
+                 <YAxis axisLine={{stroke: '#000', strokeWidth: 2}} tickLine={false} tick={{fill: '#000', fontFamily: 'JetBrains Mono', fontWeight: 600}} />
+                 <Tooltip
+                   cursor={{fill: '#F5F5F5'}}
                    formatter={(value: number) => `${displayCurrency} ${value.toFixed(2)}`}
-                   contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                   contentStyle={{ border: '3px solid #000', boxShadow: '4px 4px 0 #000', fontFamily: 'JetBrains Mono' }}
                  />
-                 <Legend iconType="circle" />
-                 <Bar name="Income" dataKey="income" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={40} />
-                 <Bar name="Expense" dataKey="expense" fill="#ef4444" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                 <Legend iconType="square" wrapperStyle={{fontFamily: 'Outfit', fontWeight: 700, textTransform: 'uppercase', fontSize: '10px'}} />
+                 <Bar name="Income" dataKey="income" fill="#BFFF00" radius={[0, 0, 0, 0]} maxBarSize={40} stroke="#000" strokeWidth={2} />
+                 <Bar name="Expense" dataKey="expense" fill="#FF006E" radius={[0, 0, 0, 0]} maxBarSize={40} stroke="#000" strokeWidth={2} />
                </BarChart>
              </ResponsiveContainer>
            </div>
@@ -229,8 +236,11 @@ const Dashboard: React.FC<DashboardProps> = ({
 
       {/* Spending Breakdown */}
       {categoryData.length > 0 && (
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
-          <h3 className="text-lg font-bold text-slate-800 mb-4">Spending Breakdown</h3>
+        <div className="bg-white border-3 border-black shadow-brutal-md p-6 animate-slide-up stagger-4">
+          <div className="flex items-center gap-3 mb-4 pb-3 border-b-3 border-black">
+            <div className="w-1 h-8 bg-hot-pink"></div>
+            <h3 className="text-base font-display font-bold text-black uppercase tracking-wider">Categories</h3>
+          </div>
           <div className="h-[200px] w-full">
             <ResponsiveContainer width="100%" height="100%" minWidth={200} minHeight={200}>
               <PieChart>
@@ -238,28 +248,30 @@ const Dashboard: React.FC<DashboardProps> = ({
                   data={categoryData}
                   cx="50%"
                   cy="50%"
-                  innerRadius={50}
-                  outerRadius={80}
-                  paddingAngle={5}
+                  innerRadius={45}
+                  outerRadius={75}
+                  paddingAngle={0}
                   dataKey="value"
+                  stroke="#000"
+                  strokeWidth={2}
                 >
                   {categoryData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>
-                <Tooltip 
+                <Tooltip
                   formatter={(value: number) => `${displayCurrency} ${value.toFixed(2)}`}
-                  contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                  contentStyle={{ border: '3px solid #000', boxShadow: '4px 4px 0 #000', fontFamily: 'JetBrains Mono' }}
                 />
               </PieChart>
             </ResponsiveContainer>
           </div>
-          <div className="mt-4 grid grid-cols-2 gap-2">
-            {categoryData.slice(0, 4).map((cat, i) => (
-              <div key={cat.name} className="flex items-center gap-2 text-xs text-slate-600">
-                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }}></div>
-                <span className="truncate">{cat.name}</span>
-                <span className="ml-auto font-medium">{displayCurrency} {cat.value.toFixed(0)}</span>
+          <div className="mt-4 grid grid-cols-1 gap-2">
+            {categoryData.slice(0, 5).map((cat, i) => (
+              <div key={cat.name} className="flex items-center gap-3 border-2 border-black p-2 hover:shadow-brutal-sm hover:translate-x-[-2px] hover:translate-y-[-2px] transition-all duration-150">
+                <div className="w-6 h-6 border-2 border-black" style={{ backgroundColor: COLORS[i % COLORS.length] }}></div>
+                <span className="truncate font-display font-bold text-xs uppercase text-black">{cat.name}</span>
+                <span className="ml-auto font-mono font-bold text-sm text-black">{displayCurrency} {cat.value.toFixed(0)}</span>
               </div>
             ))}
           </div>
@@ -267,28 +279,35 @@ const Dashboard: React.FC<DashboardProps> = ({
       )}
 
       {/* Recent Activity */}
-      <div className="space-y-3">
-        <h3 className="text-lg font-bold text-slate-800 px-1">Recent Activity</h3>
+      <div className="space-y-3 animate-slide-up stagger-5">
+        <div className="flex items-center gap-3">
+          <div className="w-1 h-8 bg-electric-cyan"></div>
+          <h3 className="text-base font-display font-bold text-black uppercase tracking-wider">Recent</h3>
+        </div>
         {recentActivity.length === 0 ? (
-          <div className="text-center py-8 text-slate-400 bg-white rounded-xl border border-dashed border-slate-200">
-            No transactions yet
+          <div className="text-center py-12 bg-white border-3 border-black border-dashed">
+            <div className="font-display font-bold text-black uppercase text-sm">No Data</div>
           </div>
         ) : (
-          recentActivity.map((t) => (
-            <div key={t.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-50 flex items-center justify-between">
+          recentActivity.map((t, idx) => (
+            <div
+              key={t.id}
+              className="bg-white border-3 border-black p-4 flex items-center justify-between hover:shadow-brutal-md hover:translate-x-[-2px] hover:translate-y-[-2px] transition-all duration-150 animate-slide-up"
+              style={{ animationDelay: `${(idx + 6) * 100}ms` }}
+            >
               <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                  t.type === TransactionType.EXPENSE ? 'bg-red-50 text-red-500' : 'bg-green-50 text-green-500'
+                <div className={`w-10 h-10 border-2 border-black flex items-center justify-center ${
+                  t.type === TransactionType.EXPENSE ? 'bg-hot-pink' : 'bg-lime'
                 }`}>
-                  {t.type === TransactionType.EXPENSE ? <TrendingDown size={18} /> : <TrendingUp size={18} />}
+                  {t.type === TransactionType.EXPENSE ? <TrendingDown size={18} className="text-white" strokeWidth={3} /> : <TrendingUp size={18} className="text-black" strokeWidth={3} />}
                 </div>
                 <div>
-                  <div className="font-semibold text-slate-800">{t.merchant}</div>
-                  <div className="text-xs text-slate-500">{t.date} • {t.category}</div>
+                  <div className="font-display font-bold text-sm text-black">{t.merchant}</div>
+                  <div className="text-[10px] font-mono text-mid-gray uppercase">{t.date} • {t.category}</div>
                 </div>
               </div>
-              <div className={`font-bold ${
-                t.type === TransactionType.EXPENSE ? 'text-slate-800' : 'text-green-600'
+              <div className={`font-mono font-bold text-lg number-display ${
+                t.type === TransactionType.EXPENSE ? 'text-black' : 'text-black'
               }`}>
                 {t.type === TransactionType.EXPENSE ? '-' : '+'}{t.amount.toFixed(2)}
               </div>

@@ -10,36 +10,69 @@
         theme: {
           extend: {
             colors: {
-              brand: {
-                50: '#f0fdfa',
-                100: '#ccfbf1',
-                500: '#14b8a6',
-                600: '#0d9488',
-                900: '#134e4a',
-              },
-              expense: '#ef4444',
-              income: '#10b981',
+              // Theme-aware colors using CSS variables
+              'theme-bg': 'var(--color-background)',
+              'theme-fg': 'var(--color-foreground)',
+              'theme-primary': 'var(--color-primary)',
+              'theme-primary-dark': 'var(--color-primary-dark)',
+              'theme-secondary': 'var(--color-secondary)',
+              'theme-secondary-dark': 'var(--color-secondary-dark)',
+              'theme-accent': 'var(--color-accent)',
+              'theme-accent-alt': 'var(--color-accent-alt)',
+
+              // Semantic colors (theme-aware)
+              'income': 'var(--color-income)',
+              'expense': 'var(--color-expense)',
+              'success': 'var(--color-success)',
+              'error': 'var(--color-error)',
+              'warning': 'var(--color-warning)',
+
+              // Neutrals (theme-aware)
+              'black': 'var(--color-black)',
+              'white': 'var(--color-white)',
+              'gray': 'var(--color-gray)',
+              'gray-light': 'var(--color-gray-light)',
+              'gray-dark': 'var(--color-gray-dark)',
+
+              // Convenience aliases (same as theme-primary/secondary)
+              'lime': 'var(--color-primary)',
+              'lime-dark': 'var(--color-primary-dark)',
+              'hot-pink': 'var(--color-secondary)',
+              'pink-dark': 'var(--color-secondary-dark)',
+              'electric-cyan': 'var(--color-accent)',
+              'electric-yellow': 'var(--color-accent-alt)',
+
+              // Additional neutrals for compatibility
+              'pure-black': 'var(--color-black)',
+              'pure-white': 'var(--color-white)',
+              'near-black': 'var(--color-gray-dark)',
+              'near-white': 'var(--color-gray-light)',
+              'mid-gray': 'var(--color-gray)',
             },
             fontFamily: {
-              sans: ['Inter', 'system-ui', 'sans-serif'],
+              display: 'var(--font-display)',
+              mono: 'var(--font-mono)',
+              body: 'var(--font-body)',
+              sans: 'var(--font-body)',
+            },
+            boxShadow: {
+              'brutal-sm': 'var(--shadow-sm)',
+              'brutal-md': 'var(--shadow-md)',
+              'brutal-lg': 'var(--shadow-lg)',
+              'brutal-xl': 'var(--shadow-xl)',
+            },
+            borderWidth: {
+              '3': 'var(--border-width)',
+            },
+            borderRadius: {
+              'theme': 'var(--border-radius)',
             },
           },
         },
       }
     </script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-      body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
-      /* Hide scrollbar for Chrome, Safari and Opera */
-      .no-scrollbar::-webkit-scrollbar {
-          display: none;
-      }
-      /* Hide scrollbar for IE, Edge and Firefox */
-      .no-scrollbar {
-          -ms-overflow-style: none;  /* IE and Edge */
-          scrollbar-width: none;  /* Firefox */
-      }
-    </style>
+    <!-- Theme Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&family=Quicksand:wght@400;500;600;700&family=Nunito:wght@400;600;700&family=Orbitron:wght@400;700;900&family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
   <script type="importmap">
 {
   "imports": {

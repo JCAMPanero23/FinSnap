@@ -1,0 +1,415 @@
+/* FinSnap Neo-Brutalist Design System */
+
+/* Import Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap');
+
+/* CSS Variables - Design Tokens */
+:root {
+  /* Colors - Neo-Brutalist Palette */
+  --color-black: #000000;
+  --color-white: #FFFFFF;
+  --color-near-black: #1A1A1A;
+  --color-near-white: #F5F5F5;
+  --color-mid-gray: #808080;
+
+  /* Accent Colors - Electric */
+  --color-lime: #BFFF00;
+  --color-lime-dark: #9FD000;
+  --color-pink: #FF006E;
+  --color-pink-dark: #CC0058;
+  --color-cyan: #00F5FF;
+  --color-yellow: #FFD600;
+
+  /* Semantic Colors */
+  --color-income: var(--color-lime);
+  --color-expense: var(--color-pink);
+  --color-success: var(--color-lime);
+  --color-error: var(--color-pink);
+  --color-warning: var(--color-yellow);
+
+  /* Typography */
+  --font-display: 'Outfit', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --font-body: 'DM Sans', sans-serif;
+
+  /* Spacing */
+  --space-unit: 4px;
+  --border-width: 3px;
+  --border-radius: 2px;
+
+  /* Shadows - Hard */
+  --shadow-sm: 2px 2px 0 var(--color-black);
+  --shadow-md: 4px 4px 0 var(--color-black);
+  --shadow-lg: 6px 6px 0 var(--color-black);
+  --shadow-xl: 8px 8px 0 var(--color-black);
+
+  /* Animation */
+  --ease-hard: cubic-bezier(0.4, 0, 0.6, 1);
+  --ease-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  --duration-fast: 150ms;
+  --duration-normal: 250ms;
+  --duration-slow: 400ms;
+}
+
+/* Base Styles */
+* {
+  box-sizing: border-box;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  background-color: var(--color-white);
+  color: var(--color-black);
+  overflow-x: hidden;
+  position: relative;
+}
+
+/* Dot Grid Background */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: radial-gradient(circle, var(--color-near-black) 1px, transparent 1px);
+  background-size: 20px 20px;
+  opacity: 0.03;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Typography Styles */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  margin: 0;
+}
+
+/* Number Display */
+.number-display {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  font-feature-settings: 'tnum';
+  font-variant-numeric: tabular-nums;
+}
+
+/* Utility Classes */
+.brutalist-border {
+  border: var(--border-width) solid var(--color-black);
+}
+
+.brutalist-shadow {
+  box-shadow: var(--shadow-md);
+}
+
+.brutalist-shadow-lg {
+  box-shadow: var(--shadow-lg);
+}
+
+.accent-bar {
+  position: relative;
+}
+
+.accent-bar::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  background: var(--color-lime);
+}
+
+/* Hide Scrollbar */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Animations */
+@keyframes slideUpFade {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes popIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  60% {
+    transform: scale(1.05);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes glitch {
+  0%, 100% {
+    transform: translate(0);
+  }
+  20% {
+    transform: translate(-2px, 2px);
+  }
+  40% {
+    transform: translate(2px, -2px);
+  }
+  60% {
+    transform: translate(-2px, -2px);
+  }
+  80% {
+    transform: translate(2px, 2px);
+  }
+}
+
+@keyframes borderPulse {
+  0%, 100% {
+    border-color: var(--color-black);
+  }
+  50% {
+    border-color: var(--color-lime);
+  }
+}
+
+.animate-slide-up {
+  animation: slideUpFade var(--duration-slow) var(--ease-hard) forwards;
+}
+
+.animate-slide-left {
+  animation: slideInLeft var(--duration-normal) var(--ease-hard) forwards;
+}
+
+.animate-slide-right {
+  animation: slideInRight var(--duration-normal) var(--ease-hard) forwards;
+}
+
+.animate-pop {
+  animation: popIn var(--duration-normal) var(--ease-bounce) forwards;
+}
+
+/* Staggered Animation Delays */
+.stagger-1 { animation-delay: 100ms; }
+.stagger-2 { animation-delay: 200ms; }
+.stagger-3 { animation-delay: 300ms; }
+.stagger-4 { animation-delay: 400ms; }
+.stagger-5 { animation-delay: 500ms; }
+
+/* Button Styles */
+.btn-brutalist {
+  font-family: var(--font-display);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 12px 24px;
+  border: var(--border-width) solid var(--color-black);
+  background: var(--color-white);
+  color: var(--color-black);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-hard);
+  position: relative;
+  box-shadow: var(--shadow-md);
+}
+
+.btn-brutalist:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: var(--shadow-lg);
+}
+
+.btn-brutalist:active {
+  transform: translate(2px, 2px);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-brutalist-primary {
+  background: var(--color-lime);
+  border-color: var(--color-black);
+  color: var(--color-black);
+}
+
+.btn-brutalist-primary:hover {
+  background: var(--color-lime-dark);
+}
+
+.btn-brutalist-danger {
+  background: var(--color-pink);
+  border-color: var(--color-black);
+  color: var(--color-white);
+}
+
+.btn-brutalist-danger:hover {
+  background: var(--color-pink-dark);
+}
+
+/* Card Styles */
+.card-brutalist {
+  background: var(--color-white);
+  border: var(--border-width) solid var(--color-black);
+  box-shadow: var(--shadow-md);
+  position: relative;
+  transition: all var(--duration-normal) var(--ease-hard);
+}
+
+.card-brutalist:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: var(--shadow-lg);
+}
+
+/* Badge Styles */
+.badge-brutalist {
+  display: inline-block;
+  font-family: var(--font-display);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 4px 8px;
+  border: 2px solid var(--color-black);
+  background: var(--color-white);
+  box-shadow: 2px 2px 0 var(--color-black);
+}
+
+/* Input Styles */
+.input-brutalist {
+  font-family: var(--font-body);
+  padding: 12px 16px;
+  border: var(--border-width) solid var(--color-black);
+  background: var(--color-white);
+  color: var(--color-black);
+  transition: all var(--duration-fast) var(--ease-hard);
+  outline: none;
+}
+
+.input-brutalist:focus {
+  border-color: var(--color-lime);
+  box-shadow: 0 0 0 3px var(--color-lime);
+}
+
+.input-brutalist-number {
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+/* Divider */
+.divider-brutalist {
+  height: 3px;
+  background: var(--color-black);
+  margin: 24px 0;
+}
+
+.divider-accent {
+  height: 6px;
+  background: linear-gradient(90deg, var(--color-lime) 0%, var(--color-pink) 100%);
+  margin: 32px 0;
+}
+
+/* Chart Overrides for Brutalist Style */
+.recharts-surface {
+  font-family: var(--font-mono) !important;
+}
+
+.recharts-cartesian-grid-horizontal line,
+.recharts-cartesian-grid-vertical line {
+  stroke: var(--color-black) !important;
+  stroke-width: 1px !important;
+}
+
+.recharts-text {
+  font-family: var(--font-mono) !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+}
+
+/* Loading Animation */
+@keyframes rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading-brutalist {
+  border: 3px solid var(--color-near-white);
+  border-top-color: var(--color-lime);
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  animation: rotate 0.8s linear infinite;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 640px) {
+  :root {
+    --border-width: 2px;
+    --shadow-sm: 1px 1px 0 var(--color-black);
+    --shadow-md: 3px 3px 0 var(--color-black);
+    --shadow-lg: 4px 4px 0 var(--color-black);
+  }
+}
+
+/* Accessibility */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Focus Visible for Keyboard Navigation */
+*:focus-visible {
+  outline: 3px solid var(--color-lime);
+  outline-offset: 2px;
+}
+
+/* Selection */
+::selection {
+  background: var(--color-lime);
+  color: var(--color-black);
+}
+
+::-moz-selection {
+  background: var(--color-lime);
+  color: var(--color-black);
+}

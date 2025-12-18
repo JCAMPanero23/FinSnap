@@ -16,6 +16,7 @@ import WarrantiesView from './components/WarrantiesView';
 import RadialNavigation from './components/RadialNavigation';
 import { Transaction, View, AppSettings, TransactionType, Category, Account, RecurringRule, SavingsGoal, WarrantyItem } from './types';
 import { v4 as uuidv4 } from 'uuid';
+import { Theme, getSavedTheme, applyTheme } from './themes';
 
 const App: React.FC = () => {
   const [session, setSession] = useState<any>(null);
@@ -34,6 +35,9 @@ const App: React.FC = () => {
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
 
+  // Theme State
+  const [currentTheme, setCurrentTheme] = useState<Theme>(getSavedTheme());
+
   // Date Filter State
   const [dateFilter, setDateFilter] = useState<'month' | 'year' | 'week' | 'custom' | 'all'>('month');
   const [customStartDate, setCustomStartDate] = useState<string>('');
@@ -43,6 +47,13 @@ const App: React.FC = () => {
   const [monthOffset, setMonthOffset] = useState(0);
   const [yearOffset, setYearOffset] = useState(0);
   const [weekOffset, setWeekOffset] = useState(0);
+
+  // Apply saved theme on mount
+  useEffect(() => {
+    const savedTheme = getSavedTheme();
+    applyTheme(savedTheme);
+    setCurrentTheme(savedTheme);
+  }, []);
 
   // Check if on reset password page
   useEffect(() => {
@@ -750,6 +761,8 @@ const App: React.FC = () => {
             settings={settings}
             onUpdateSettings={handleUpdateSettings}
             onBack={() => setCurrentView('dashboard')}
+            currentTheme={currentTheme}
+            onThemeChange={setCurrentTheme}
           />
         );
       default:

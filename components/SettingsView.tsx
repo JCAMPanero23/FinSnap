@@ -2,11 +2,15 @@ import React, { useState } from 'react';
 import { AppSettings, Category, Account, AccountType, RecurringRule, TransactionType } from '../types';
 import { Plus, X, Save, Trash2, RotateCcw, CreditCard, Wallet, Building2, Banknote, Tag, ArrowRight, RefreshCw } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
+import { Theme } from '../themes';
+import ThemeSwitcher from './ThemeSwitcher';
 
 interface SettingsViewProps {
   settings: AppSettings;
   onUpdateSettings: (settings: AppSettings) => void;
   onBack: () => void;
+  currentTheme: Theme;
+  onThemeChange: (theme: Theme) => void;
 }
 
 const DEFAULT_COLORS = [
@@ -17,10 +21,14 @@ const DEFAULT_COLORS = [
 
 const ACCOUNT_TYPES: AccountType[] = ['Bank', 'Credit Card', 'Cash', 'Wallet', 'Other'];
 
-const SettingsView: React.FC<SettingsViewProps> = ({ settings, onUpdateSettings, onBack }) => {
+const SettingsView: React.FC<SettingsViewProps> = ({ settings, onUpdateSettings, onBack, currentTheme, onThemeChange }) => {
   const [localSettings, setLocalSettings] = useState<AppSettings>(JSON.parse(JSON.stringify(settings)));
-  const [activeTab, setActiveTab] = useState<'general' | 'categories' | 'accounts' | 'rules'>('general');
-  
+  const [activeTab, setActiveTab] = useState<'general' | 'categories' | 'accounts' | 'rules' | 'themes' | 'developer'>('general');
+
+  // Developer Settings State
+  const [devPasswordInput, setDevPasswordInput] = useState('');
+  const [devUnlocked, setDevUnlocked] = useState(false);
+
   // Category State
   const [newCategoryName, setNewCategoryName] = useState('');
 
@@ -156,7 +164,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, onUpdateSettings,
 
       {/* Tabs */}
       <div className="flex p-2 bg-white border-b border-slate-100 gap-2 overflow-x-auto">
-        {(['general', 'categories', 'accounts', 'rules'] as const).map(tab => (
+        {(['general', 'categories', 'accounts', 'rules', 'themes', 'developer'] as const).map(tab => (
            <button
              key={tab}
              onClick={() => setActiveTab(tab)}
@@ -164,7 +172,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, onUpdateSettings,
                activeTab === tab ? 'bg-brand-50 text-brand-700' : 'text-slate-500 hover:bg-slate-50'
              }`}
            >
-             {tab === 'rules' ? 'Helpers' : tab}
+             {tab === 'rules' ? 'Helpers' : tab === 'developer' ? 'Developer' : tab}
            </button>
         ))}
       </div>
@@ -372,6 +380,107 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, onUpdateSettings,
                   ))}
                 </div>
              </div>
+          </section>
+        )}
+
+        {/* Themes Tab */}
+        {activeTab === 'themes' && (
+          <section className="animate-in fade-in slide-in-from-right-4 duration-300">
+            <ThemeSwitcher currentTheme={currentTheme} onThemeChange={onThemeChange} />
+          </section>
+        )}
+
+        {/* Developer Tab */}
+        {activeTab === 'developer' && (
+          <section className="animate-in fade-in slide-in-from-right-4 duration-300">
+            <div className="mb-4 bg-red-50 p-4 rounded-xl border border-red-100 text-xs text-red-700">
+              <p className="font-bold mb-1">⚠️ Developer Settings</p>
+              <p>These actions are irreversible and should be used with caution. Password required.</p>
+            </div>
+
+            {!devUnlocked ? (
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                <h3 className="text-sm font-bold text-slate-700 mb-3">Enter Password</h3>
+                <input
+                  type="password"
+                  value={devPasswordInput}
+                  onChange={(e) => setDevPasswordInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && devPasswordInput === 'JcampDEV') {
+                      setDevUnlocked(true);
+                    }
+                  }}
+                  placeholder="Developer password"
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 mb-3"
+                />
+                <button
+                  onClick={() => {
+                    if (devPasswordInput === 'JcampDEV') {
+                      setDevUnlocked(true);
+                    } else {
+                      alert('Incorrect password');
+                    }
+                  }}
+                  className="w-full py-3 bg-brand-600 text-white rounded-xl font-bold text-sm shadow-brand-500/20 shadow-lg active:scale-95 transition-transform"
+                >
+                  Unlock
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                  <h3 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
+                    <RotateCcw size={16} />
+                    Soft Reset (Transactions Only)
+                  </h3>
+                  <p className="text-xs text-slate-500 mb-4">
+                    This will delete all transactions but keep your accounts, categories, and settings intact.
+                  </p>
+                  <button
+                    onClick={() => {
+                      if (window.confirm('Are you sure you want to delete ALL transactions? This cannot be undone.')) {
+                        // Implement soft reset in App.tsx handler
+                        onUpdateSettings({
+                          ...localSettings,
+                          __resetTransactions: true
+                        } as any);
+                        alert('All transactions have been deleted.');
+                        onBack();
+                      }
+                    }}
+                    className="w-full py-3 bg-orange-500 text-white rounded-xl font-bold text-sm shadow-lg active:scale-95 transition-transform hover:bg-orange-600"
+                  >
+                    Soft Reset
+                  </button>
+                </div>
+
+                <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                  <h3 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
+                    <Trash2 size={16} />
+                    Hard Reset (Factory Default)
+                  </h3>
+                  <p className="text-xs text-slate-500 mb-4">
+                    This will delete ALL data including transactions, accounts, categories, and recurring rules. The app will be reset to factory defaults.
+                  </p>
+                  <button
+                    onClick={() => {
+                      if (window.confirm('⚠️ FINAL WARNING: This will permanently delete ALL your data. Are you absolutely sure?')) {
+                        // Implement hard reset in App.tsx handler
+                        onUpdateSettings({
+                          ...localSettings,
+                          __resetToDefault: true
+                        } as any);
+                        alert('App has been reset to factory defaults.');
+                        onBack();
+                      }
+                    }}
+                    className="w-full py-3 bg-red-600 text-white rounded-xl font-bold text-sm shadow-lg active:scale-95 transition-transform hover:bg-red-700"
+                  >
+                    Hard Reset (Factory Default)
+                  </button>
+                </div>
+              </div>
+            )}
           </section>
         )}
       </div>

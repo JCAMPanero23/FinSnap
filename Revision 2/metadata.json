@@ -1,0 +1,7 @@
+{
+  "name": "FinSnap - AI Expense Tracker",
+  "description": "A smart financial companion that parses bank transaction messages (SMS/Text) into organized expenses and income automatically using Gemini AI.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
