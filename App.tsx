@@ -159,12 +159,26 @@ const App: React.FC = () => {
       const userId = session?.user?.id;
       if (!userId) return;
 
-      // Load settings
-      const { data: userSettings } = await supabase
+      // Load settings (gradient columns may not exist in database yet)
+      let userSettings = null;
+      const settingsResult = await supabase
         .from('user_settings')
         .select('base_currency, gradient_start_color, gradient_end_color, gradient_angle')
         .eq('id', userId)
         .single();
+
+      if (settingsResult.error) {
+        // If gradient columns don't exist, fall back to base_currency only
+        console.log('Gradient columns not found, using defaults:', settingsResult.error.message);
+        const fallbackResult = await supabase
+          .from('user_settings')
+          .select('base_currency')
+          .eq('id', userId)
+          .single();
+        userSettings = fallbackResult.data;
+      } else {
+        userSettings = settingsResult.data;
+      }
 
       // Load categories
       const { data: categories } = await supabase
@@ -722,12 +736,21 @@ const App: React.FC = () => {
           newSettings.gradientStartColor !== settings.gradientStartColor ||
           newSettings.gradientEndColor !== settings.gradientEndColor ||
           newSettings.gradientAngle !== settings.gradientAngle) {
-        await supabase.from('user_settings').update({
+        // Try to update gradient settings
+        const updateResult = await supabase.from('user_settings').update({
           base_currency: newSettings.baseCurrency,
           gradient_start_color: newSettings.gradientStartColor,
           gradient_end_color: newSettings.gradientEndColor,
           gradient_angle: newSettings.gradientAngle
         }).eq('id', userId);
+
+        // If gradient columns don't exist, update only base_currency
+        if (updateResult.error) {
+          console.log('Gradient columns not found, updating base_currency only:', updateResult.error.message);
+          await supabase.from('user_settings').update({
+            base_currency: newSettings.baseCurrency
+          }).eq('id', userId);
+        }
       }
 
       // Update local state

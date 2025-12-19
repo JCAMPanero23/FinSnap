@@ -1,4 +1,4 @@
-import { useRef, useCallback, useState } from 'react';
+import { useRef, useCallback, useState, useEffect } from 'react';
 
 interface UseDragGestureOptions {
   onDragRight: () => void;
@@ -16,16 +16,18 @@ export const useDragGesture = ({
   const startPosRef = useRef<{ x: number; y: number } | null>(null);
   const isDraggingRef = useRef(false);
   const [isDragging, setIsDragging] = useState(false);
+  const isMouseDownRef = useRef(false);
 
   const handleStart = useCallback((clientX: number, clientY: number) => {
     startPosRef.current = { x: clientX, y: clientY };
     isDraggingRef.current = false;
     setIsDragging(false);
+    isMouseDownRef.current = true;
   }, []);
 
   const handleMove = useCallback(
     (clientX: number, clientY: number) => {
-      if (!startPosRef.current) return;
+      if (!startPosRef.current || !isMouseDownRef.current) return;
 
       const dx = clientX - startPosRef.current.x;
       const dy = clientY - startPosRef.current.y;
@@ -42,7 +44,7 @@ export const useDragGesture = ({
 
   const handleEnd = useCallback(
     (clientX: number, clientY: number) => {
-      if (!startPosRef.current) return;
+      if (!startPosRef.current || !isMouseDownRef.current) return;
 
       const dx = clientX - startPosRef.current.x;
       const dy = clientY - startPosRef.current.y;
@@ -59,30 +61,49 @@ export const useDragGesture = ({
       // Cleanup
       startPosRef.current = null;
       isDraggingRef.current = false;
+      isMouseDownRef.current = false;
       setIsDragging(false);
     },
     [onDragRight, onTap, dragThreshold, swipeThreshold]
   );
 
-  const handleOnMouseDown = useCallback(
-    (e: React.MouseEvent) => {
-      handleStart(e.clientX, e.clientY);
-    },
-    [handleStart]
-  );
-
-  const handleOnMouseMove = useCallback(
-    (e: React.MouseEvent) => {
-      handleMove(e.clientX, e.clientY);
+  // Global mouse move handler for proper drag support
+  const handleDocumentMouseMove = useCallback(
+    (e: MouseEvent) => {
+      if (isMouseDownRef.current) {
+        handleMove(e.clientX, e.clientY);
+      }
     },
     [handleMove]
   );
 
-  const handleOnMouseUp = useCallback(
-    (e: React.MouseEvent) => {
-      handleEnd(e.clientX, e.clientY);
+  // Global mouse up handler for proper drag support
+  const handleDocumentMouseUp = useCallback(
+    (e: MouseEvent) => {
+      if (isMouseDownRef.current) {
+        handleEnd(e.clientX, e.clientY);
+      }
     },
     [handleEnd]
+  );
+
+  // Attach/detach global mouse listeners
+  useEffect(() => {
+    document.addEventListener('mousemove', handleDocumentMouseMove);
+    document.addEventListener('mouseup', handleDocumentMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleDocumentMouseMove);
+      document.removeEventListener('mouseup', handleDocumentMouseUp);
+    };
+  }, [handleDocumentMouseMove, handleDocumentMouseUp]);
+
+  const handleOnMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault(); // Prevent text selection while dragging
+      handleStart(e.clientX, e.clientY);
+    },
+    [handleStart]
   );
 
   const handleOnTouchStart = useCallback(
@@ -112,8 +133,7 @@ export const useDragGesture = ({
   return {
     handlers: {
       onMouseDown: handleOnMouseDown,
-      onMouseMove: handleOnMouseMove,
-      onMouseUp: handleOnMouseUp,
+      // Mouse move/up handled globally via document listeners
       onTouchStart: handleOnTouchStart,
       onTouchMove: handleOnTouchMove,
       onTouchEnd: handleOnTouchEnd,
