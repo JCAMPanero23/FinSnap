@@ -17,6 +17,33 @@ import BottomTabs from './components/BottomTabs';
 import NavigationDrawer from './components/NavigationDrawer';
 import { Transaction, View, AppSettings, TransactionType, Category, Account, RecurringRule, SavingsGoal, WarrantyItem } from './types';
 import { v4 as uuidv4 } from 'uuid';
+import {
+  getAllTransactions,
+  getAllAccounts,
+  getAllCategories,
+  getAllRecurringRules,
+  getAllWarranties,
+  getSetting,
+  saveSetting,
+  saveTransaction,
+  deleteTransaction as deleteTransactionDB,
+  saveAccount,
+  deleteAccount as deleteAccountDB,
+  saveCategory,
+  deleteCategory as deleteCategoryDB,
+  saveRecurringRule,
+  deleteRecurringRule as deleteRecurringRuleDB,
+  saveWarranty,
+  deleteWarranty as deleteWarrantyDB,
+  clearTransactions,
+  clearAllData,
+} from './services/indexedDBService';
+import { isBiometricEnabled, setBiometricEnabled } from './services/biometricService';
+import BiometricLock from './components/BiometricLock';
+import BackupRestoreModal from './components/BackupRestoreModal';
+import { needsMigration, migrateFromSupabase } from './services/migrationService';
+import { cleanupOldReceipts } from './services/receiptCleanupService';
+import { shouldAutoBackup, exportToCSV, exportReceiptsZip, uploadBackup, markAutoBackupComplete } from './services/backupService';
 
 const DEFAULT_SETTINGS: AppSettings = {
   baseCurrency: 'USD',
@@ -50,6 +77,9 @@ const App: React.FC = () => {
   });
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
+  const [biometricLocked, setBiometricLocked] = useState(true);
+  const [showBackupRestoreModal, setShowBackupRestoreModal] = useState(false);
+  const [migrating, setMigrating] = useState(false);
 
   // Date Filter State
   const [dateFilter, setDateFilter] = useState<'month' | 'year' | 'week' | 'custom' | 'all'>('month');
@@ -156,120 +186,70 @@ const App: React.FC = () => {
 
   const loadUserData = async () => {
     try {
-      const userId = session?.user?.id;
-      if (!userId) return;
-
-      // Load settings (gradient columns may not exist in database yet)
-      let userSettings = null;
-      const settingsResult = await supabase
-        .from('user_settings')
-        .select('base_currency, gradient_start_color, gradient_end_color, gradient_angle')
-        .eq('id', userId)
-        .single();
-
-      if (settingsResult.error) {
-        // If gradient columns don't exist, fall back to base_currency only
-        console.log('Gradient columns not found, using defaults:', settingsResult.error.message);
-        const fallbackResult = await supabase
-          .from('user_settings')
-          .select('base_currency')
-          .eq('id', userId)
-          .single();
-        userSettings = fallbackResult.data;
-      } else {
-        userSettings = settingsResult.data;
+      // Check if migration needed
+      if (session?.user) {
+        const needsMig = await needsMigration(session.user.id);
+        if (needsMig) {
+          setMigrating(true);
+          await migrateFromSupabase(session.user.id);
+          setMigrating(false);
+        }
       }
 
-      // Load categories
-      const { data: categories } = await supabase
-        .from('categories')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at');
+      // Load from IndexedDB
+      const [
+        txns,
+        accounts,
+        categories,
+        rules,
+        warranties,
+        baseCurrency,
+        gradientStartColor,
+        gradientEndColor,
+        gradientAngle,
+      ] = await Promise.all([
+        getAllTransactions(),
+        getAllAccounts(),
+        getAllCategories(),
+        getAllRecurringRules(),
+        getAllWarranties(),
+        getSetting('baseCurrency'),
+        getSetting('gradientStartColor'),
+        getSetting('gradientEndColor'),
+        getSetting('gradientAngle'),
+      ]);
 
-      // Load accounts
-      const { data: accounts } = await supabase
-        .from('accounts')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at');
-
-      // Load recurring rules
-      const { data: rules } = await supabase
-        .from('recurring_rules')
-        .select('*')
-        .eq('user_id', userId);
-
-      // Load transactions
-      const { data: txns } = await supabase
-        .from('transactions')
-        .select('*')
-        .eq('user_id', userId)
-        .order('date', { ascending: false })
-        .order('created_at', { ascending: false });
-
-      // Map database data to app format
-      const mappedCategories: Category[] = (categories || []).map(c => ({
-        id: c.id,
-        name: c.name,
-        color: c.color,
-        isDefault: c.is_default
-      }));
-
-      const mappedAccounts: Account[] = (accounts || []).map(a => ({
-        id: a.id,
-        name: a.name,
-        type: a.type,
-        last4Digits: a.last_4_digits,
-        color: a.color,
-        currency: a.currency,
-        balance: parseFloat(a.balance),
-        autoUpdateBalance: a.auto_update_balance,
-        totalCreditLimit: a.total_credit_limit ? parseFloat(a.total_credit_limit) : undefined,
-        monthlySpendingLimit: a.monthly_spending_limit ? parseFloat(a.monthly_spending_limit) : undefined,
-        paymentDueDay: a.payment_due_day
-      }));
-
-      const mappedRules: RecurringRule[] = (rules || []).map(r => ({
-        id: r.id,
-        merchantKeyword: r.merchant_keyword,
-        category: r.category,
-        type: r.type
-      }));
-
-      const mappedTransactions: Transaction[] = (txns || []).map(t => ({
-        id: t.id,
-        amount: parseFloat(t.amount),
-        currency: t.currency,
-        originalAmount: t.original_amount ? parseFloat(t.original_amount) : undefined,
-        originalCurrency: t.original_currency,
-        exchangeRate: t.exchange_rate ? parseFloat(t.exchange_rate) : undefined,
-        merchant: t.merchant,
-        date: t.date,
-        time: t.time,
-        category: t.category,
-        type: t.type,
-        account: t.account,
-        accountId: t.account_id,
-        rawText: t.raw_text,
-        tags: t.tags,
-        parsedMeta: t.parsed_meta,
-        isTransfer: t.is_transfer
-      }));
-
+      setTransactions(txns || []);
       setSettings({
-        baseCurrency: userSettings?.base_currency || 'USD',
-        categories: mappedCategories,
-        accounts: mappedAccounts,
-        recurringRules: mappedRules,
-        savingsGoals: [], // TODO: Load from database when table is created
-        warranties: [], // TODO: Load from database when table is created
-        gradientStartColor: userSettings?.gradient_start_color || '#d0dddf',
-        gradientEndColor: userSettings?.gradient_end_color || '#dcfefb',
-        gradientAngle: userSettings?.gradient_angle || 135
+        baseCurrency: baseCurrency || 'USD',
+        categories: categories || [],
+        accounts: accounts || [],
+        recurringRules: rules || [],
+        savingsGoals: [], // Not migrated yet
+        warranties: warranties || [],
+        gradientStartColor: gradientStartColor || '#d0dddf',
+        gradientEndColor: gradientEndColor || '#dcfefb',
+        gradientAngle: gradientAngle || 135,
       });
 
-      setTransactions(mappedTransactions);
+      // Run cleanup on startup
+      await cleanupOldReceipts();
+
+      // Check auto-backup
+      if (session?.user) {
+        const shouldBackup = await shouldAutoBackup();
+        if (shouldBackup) {
+          try {
+            const csv = await exportToCSV();
+            const receiptsBlob = await exportReceiptsZip();
+            await uploadBackup(session.user.id, csv, receiptsBlob);
+            await markAutoBackupComplete();
+            console.log('Auto-backup completed');
+          } catch (err) {
+            console.error('Auto-backup failed:', err);
+          }
+        }
+      }
     } catch (error) {
       console.error('Error loading user data:', error);
     }
@@ -297,132 +277,49 @@ const App: React.FC = () => {
     return newTxnDateTime >= mostRecentDateTime;
   };
 
-  const handleAddTransactions = async (newTransactions: Transaction[]) => {
-    try {
-      const userId = session?.user?.id;
-      if (!userId) return;
+  const handleAddTransactions = async (newTransactions: Omit<Transaction, 'id'>[]) => {
+    const txnsWithIds = newTransactions.map(tx => ({
+      ...tx,
+      id: uuidv4(),
+    }));
 
-      // 1. Insert transactions into database
-      const txnsToInsert = newTransactions.map(t => ({
-        user_id: userId,
-        amount: t.amount,
-        currency: t.currency,
-        original_amount: t.originalAmount,
-        original_currency: t.originalCurrency,
-        exchange_rate: t.exchangeRate,
-        merchant: t.merchant,
-        date: t.date,
-        time: t.time,
-        category: t.category,
-        type: t.type,
-        account: t.account,
-        account_id: t.accountId,
-        raw_text: t.rawText,
-        tags: t.tags,
-        parsed_meta: t.parsedMeta,
-        is_transfer: t.isTransfer
-      }));
+    // Save to IndexedDB
+    for (const tx of txnsWithIds) {
+      await saveTransaction(tx);
 
-      const { data: insertedTxns, error } = await supabase
-        .from('transactions')
-        .insert(txnsToInsert)
-        .select();
+      // Update account balances
+      if (tx.accountId) {
+        const account = settings.accounts.find(a => a.id === tx.accountId);
+        if (account) {
+          let newBalance = account.balance;
 
-      if (error) throw error;
-
-      // 2. Update Account Balances
-      const updatedAccounts = [...settings.accounts];
-      let accountsChanged = false;
-
-      newTransactions.forEach(t => {
-        const accIndex = t.accountId ? updatedAccounts.findIndex(a => a.id === t.accountId) : -1;
-
-        if (accIndex !== -1) {
-          const acc = updatedAccounts[accIndex];
-
-          // Smart balance update: Only update if transaction is recent
-          const shouldUpdate = shouldUpdateBalance(t, t.accountId!);
-
-          if (shouldUpdate) {
-            let balanceUpdatedViaSnapshot = false;
-
-            if (acc.autoUpdateBalance !== false && t.parsedMeta) {
-              if (t.parsedMeta.availableCredit !== undefined && acc.totalCreditLimit) {
-                acc.balance = -(acc.totalCreditLimit - t.parsedMeta.availableCredit);
-                balanceUpdatedViaSnapshot = true;
-              } else if (t.parsedMeta.availableBalance !== undefined) {
-                acc.balance = t.parsedMeta.availableBalance;
-                balanceUpdatedViaSnapshot = true;
-              }
+          if (tx.parsedMeta?.availableBalance !== undefined) {
+            newBalance = tx.parsedMeta.availableBalance;
+          } else if (tx.parsedMeta?.availableCredit !== undefined && account.totalCreditLimit) {
+            newBalance = -(account.totalCreditLimit - tx.parsedMeta.availableCredit);
+          } else {
+            if (tx.type === TransactionType.EXPENSE) {
+              newBalance -= tx.amount;
+            } else if (tx.type === TransactionType.INCOME) {
+              newBalance += tx.amount;
             }
-
-            if (!balanceUpdatedViaSnapshot) {
-              if (t.type === TransactionType.EXPENSE) {
-                acc.balance -= t.amount;
-              } else if (t.type === TransactionType.INCOME) {
-                acc.balance += t.amount;
-              }
-            }
-            accountsChanged = true;
           }
-        }
-      });
 
-      // 3. Update accounts in database
-      if (accountsChanged) {
-        for (const acc of updatedAccounts) {
-          await supabase
-            .from('accounts')
-            .update({ balance: acc.balance })
-            .eq('id', acc.id);
+          const updatedAccount = { ...account, balance: newBalance };
+          await saveAccount(updatedAccount);
         }
       }
-
-      // 4. Update local state
-      const mappedInserted: Transaction[] = (insertedTxns || []).map(t => ({
-        id: t.id,
-        amount: parseFloat(t.amount),
-        currency: t.currency,
-        originalAmount: t.original_amount ? parseFloat(t.original_amount) : undefined,
-        originalCurrency: t.original_currency,
-        exchangeRate: t.exchange_rate ? parseFloat(t.exchange_rate) : undefined,
-        merchant: t.merchant,
-        date: t.date,
-        time: t.time,
-        category: t.category,
-        type: t.type,
-        account: t.account,
-        accountId: t.account_id,
-        rawText: t.raw_text,
-        tags: t.tags,
-        parsedMeta: t.parsed_meta,
-        isTransfer: t.is_transfer
-      }));
-
-      setTransactions(prev => [...mappedInserted, ...prev]);
-      setSettings(prev => ({ ...prev, accounts: updatedAccounts }));
-      setCurrentView('dashboard');
-    } catch (error) {
-      console.error('Error adding transactions:', error);
-      alert('Failed to add transactions. Please try again.');
     }
+
+    // Reload data
+    await loadUserData();
+    setCurrentView('dashboard');
   };
 
   const handleDeleteTransaction = async (id: string) => {
     if (window.confirm("Are you sure you want to delete this transaction?")) {
-      try {
-        const { error } = await supabase
-          .from('transactions')
-          .delete()
-          .eq('id', id);
-
-        if (error) throw error;
-
-        setTransactions(prev => prev.filter(t => t.id !== id));
-      } catch (error) {
-        console.error('Error deleting transaction:', error);
-        alert('Failed to delete transaction. Please try again.');
-      }
+      await deleteTransactionDB(id);
+      await loadUserData();
     }
   };
 
@@ -430,69 +327,23 @@ const App: React.FC = () => {
     setEditingTransaction(transaction);
   };
 
-  const handleUpdateTransaction = async (updatedTransaction: Transaction) => {
-    try {
-      const { error } = await supabase
-        .from('transactions')
-        .update({
-          amount: updatedTransaction.amount,
-          currency: updatedTransaction.currency,
-          original_amount: updatedTransaction.originalAmount,
-          original_currency: updatedTransaction.originalCurrency,
-          exchange_rate: updatedTransaction.exchangeRate,
-          merchant: updatedTransaction.merchant,
-          date: updatedTransaction.date,
-          time: updatedTransaction.time,
-          category: updatedTransaction.category,
-          type: updatedTransaction.type,
-          account: updatedTransaction.account,
-          account_id: updatedTransaction.accountId,
-          raw_text: updatedTransaction.rawText,
-          tags: updatedTransaction.tags,
-          parsed_meta: updatedTransaction.parsedMeta,
-          is_transfer: updatedTransaction.isTransfer
-        })
-        .eq('id', updatedTransaction.id);
-
-      if (error) throw error;
-
-      setTransactions(prev => prev.map(t => t.id === updatedTransaction.id ? updatedTransaction : t));
-      setEditingTransaction(null);
-    } catch (error) {
-      console.error('Error updating transaction:', error);
-      alert('Failed to update transaction. Please try again.');
-    }
+  const handleUpdateTransaction = async (updated: Transaction) => {
+    await saveTransaction(updated);
+    setEditingTransaction(null);
+    await loadUserData();
   };
 
   const handleAddRuleFromTransaction = async (merchant: string, category: string, type: TransactionType) => {
     try {
-      const userId = session?.user?.id;
-      if (!userId) return;
-
-      const { data, error } = await supabase
-        .from('recurring_rules')
-        .insert({
-          user_id: userId,
-          merchant_keyword: merchant,
-          category,
-          type
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
       const newRule: RecurringRule = {
-        id: data.id,
-        merchantKeyword: data.merchant_keyword,
-        category: data.category,
-        type: data.type
+        id: uuidv4(),
+        merchantKeyword: merchant,
+        category,
+        type
       };
 
-      setSettings(prev => ({
-        ...prev,
-        recurringRules: [...prev.recurringRules, newRule]
-      }));
+      await saveRecurringRule(newRule);
+      await loadUserData();
     } catch (error) {
       console.error('Error adding recurring rule:', error);
     }
@@ -503,224 +354,63 @@ const App: React.FC = () => {
     setCurrentView('history');
   };
 
-  const handleUpdateSettings = async (newSettings: AppSettings, accountReplacements?: { newAccountId: string, replaceAccountId: string | 'ORPHANS' }[]) => {
+  const handleUpdateSettings = async (newSettings: AppSettings) => {
     try {
-      const userId = session?.user?.id;
-      if (!userId) return;
-
       // Handle Developer Reset Actions
       if ((newSettings as any).__resetTransactions) {
         // Soft Reset - Delete all transactions and reset account balances to 0
-        await supabase.from('transactions').delete().eq('user_id', userId);
-
-        // Reset all account balances to 0
-        const { data: userAccounts } = await supabase
-          .from('accounts')
-          .select('id')
-          .eq('user_id', userId);
-
-        if (userAccounts) {
-          for (const acc of userAccounts) {
-            await supabase
-              .from('accounts')
-              .update({ balance: 0 })
-              .eq('id', acc.id);
-          }
+        await clearTransactions();
+        const accounts = await getAllAccounts();
+        for (const acc of accounts) {
+          await saveAccount({ ...acc, balance: 0 });
         }
-
-        setTransactions([]);
-        // Reload user data to get updated balances
         await loadUserData();
         return;
       }
 
       if ((newSettings as any).__resetToDefault) {
         // Hard Reset - Delete all user data
-        await supabase.from('transactions').delete().eq('user_id', userId);
-        await supabase.from('recurring_rules').delete().eq('user_id', userId);
-        await supabase.from('accounts').delete().eq('user_id', userId);
-        await supabase.from('categories').delete().eq('user_id', userId);
-        await supabase.from('user_settings').delete().eq('user_id', userId);
-
-        // Reset to defaults
+        await clearAllData();
         setTransactions([]);
         setSettings(DEFAULT_SETTINGS);
         return;
       }
 
-      // Update categories
-      for (const category of newSettings.categories) {
-        const existingCategory = settings.categories.find(c => c.id === category.id);
-        if (!existingCategory) {
-          // New category - insert
-          await supabase.from('categories').insert({
-            id: category.id,
-            user_id: userId,
-            name: category.name,
-            color: category.color,
-            is_default: category.isDefault || false
-          });
-        } else if (JSON.stringify(existingCategory) !== JSON.stringify(category)) {
-          // Updated category - update
-          await supabase.from('categories').update({
-            name: category.name,
-            color: category.color,
-            is_default: category.isDefault || false
-          }).eq('id', category.id);
-        }
+      // Save settings
+      await saveSetting('baseCurrency', newSettings.baseCurrency);
+      await saveSetting('gradientStartColor', newSettings.gradientStartColor);
+      await saveSetting('gradientEndColor', newSettings.gradientEndColor);
+      await saveSetting('gradientAngle', newSettings.gradientAngle);
+
+      // Save categories
+      for (const cat of newSettings.categories) {
+        await saveCategory(cat);
       }
 
       // Delete removed categories
       const removedCategories = settings.categories.filter(
         c => !newSettings.categories.find(nc => nc.id === c.id)
       );
-      for (const category of removedCategories) {
-        await supabase.from('categories').delete().eq('id', category.id);
+      for (const cat of removedCategories) {
+        await deleteCategoryDB(cat.id);
       }
 
-      // Update accounts
-      for (const account of newSettings.accounts) {
-        const existingAccount = settings.accounts.find(a => a.id === account.id);
-        if (!existingAccount) {
-          // New account - insert
-          await supabase.from('accounts').insert({
-            id: account.id,
-            user_id: userId,
-            name: account.name,
-            type: account.type,
-            last_4_digits: account.last4Digits,
-            color: account.color,
-            currency: account.currency,
-            balance: account.balance,
-            total_credit_limit: account.totalCreditLimit,
-            monthly_spending_limit: account.monthlySpendingLimit,
-            payment_due_day: account.paymentDueDay,
-            auto_update_balance: account.autoUpdateBalance !== false
-          });
-        } else {
-          // Updated account - update
-          await supabase.from('accounts').update({
-            name: account.name,
-            type: account.type,
-            last_4_digits: account.last4Digits,
-            color: account.color,
-            currency: account.currency,
-            balance: account.balance,
-            total_credit_limit: account.totalCreditLimit,
-            monthly_spending_limit: account.monthlySpendingLimit,
-            payment_due_day: account.paymentDueDay,
-            auto_update_balance: account.autoUpdateBalance !== false
-          }).eq('id', account.id);
-        }
-      }
-
-      // Auto-link orphaned transactions by last4Digits
-      for (const account of newSettings.accounts) {
-        if (account.last4Digits) {
-          // Find orphaned transactions that match this account's last4Digits
-          const { data: orphanedTxns } = await supabase
-            .from('transactions')
-            .select('*')
-            .eq('user_id', userId)
-            .is('account_id', null);
-
-          if (orphanedTxns && orphanedTxns.length > 0) {
-            // Filter transactions where the account field contains the last4Digits
-            const matchingTxns = orphanedTxns.filter(t =>
-              t.account && t.account.includes(account.last4Digits!)
-            );
-
-            // Update matching transactions to link them to this account
-            for (const txn of matchingTxns) {
-              await supabase
-                .from('transactions')
-                .update({ account_id: account.id })
-                .eq('id', txn.id);
-            }
-
-            if (matchingTxns.length > 0) {
-              console.log(`Auto-linked ${matchingTxns.length} transactions to account ${account.name}`);
-            }
-          }
-        }
-      }
-
-      // Handle account replacements (manual reassignment)
-      if (accountReplacements && accountReplacements.length > 0) {
-        for (const replacement of accountReplacements) {
-          if (replacement.replaceAccountId === 'ORPHANS') {
-            // Reassign all orphaned transactions to the new account
-            await supabase
-              .from('transactions')
-              .update({ account_id: replacement.newAccountId })
-              .eq('user_id', userId)
-              .is('account_id', null);
-
-            console.log(`Reassigned orphaned transactions to account ${replacement.newAccountId}`);
-          } else {
-            // Reassign all transactions from old account to new account
-            await supabase
-              .from('transactions')
-              .update({ account_id: replacement.newAccountId })
-              .eq('user_id', userId)
-              .eq('account_id', replacement.replaceAccountId);
-
-            console.log(`Reassigned transactions from ${replacement.replaceAccountId} to ${replacement.newAccountId}`);
-          }
-        }
-
-        // Reload transactions to reflect changes
-        const { data: updatedTransactions } = await supabase
-          .from('transactions')
-          .select('*')
-          .eq('user_id', userId)
-          .order('date', { ascending: false });
-
-        if (updatedTransactions) {
-          setTransactions(updatedTransactions.map(t => ({
-            id: t.id,
-            groupId: t.group_id,
-            amount: t.amount,
-            currency: t.currency,
-            originalAmount: t.original_amount,
-            originalCurrency: t.original_currency,
-            exchangeRate: t.exchange_rate,
-            merchant: t.merchant,
-            date: t.date,
-            time: t.time,
-            category: t.category,
-            type: t.type as TransactionType,
-            account: t.account,
-            accountId: t.account_id,
-            rawText: t.raw_text,
-            tags: t.tags,
-            parsedMeta: t.parsed_meta,
-            isTransfer: t.is_transfer
-          })));
-        }
+      // Save accounts
+      for (const acc of newSettings.accounts) {
+        await saveAccount(acc);
       }
 
       // Delete removed accounts
       const removedAccounts = settings.accounts.filter(
         a => !newSettings.accounts.find(na => na.id === a.id)
       );
-      for (const account of removedAccounts) {
-        await supabase.from('accounts').delete().eq('id', account.id);
+      for (const acc of removedAccounts) {
+        await deleteAccountDB(acc.id);
       }
 
-      // Update recurring rules
+      // Save rules
       for (const rule of newSettings.recurringRules) {
-        const existingRule = settings.recurringRules.find(r => r.id === rule.id);
-        if (!existingRule) {
-          // New rule - insert
-          await supabase.from('recurring_rules').insert({
-            id: rule.id,
-            user_id: userId,
-            merchant_keyword: rule.merchantKeyword,
-            category: rule.category,
-            type: rule.type
-          });
-        }
+        await saveRecurringRule(rule);
       }
 
       // Delete removed rules
@@ -728,33 +418,24 @@ const App: React.FC = () => {
         r => !newSettings.recurringRules.find(nr => nr.id === r.id)
       );
       for (const rule of removedRules) {
-        await supabase.from('recurring_rules').delete().eq('id', rule.id);
+        await deleteRecurringRuleDB(rule.id);
       }
 
-      // Update base currency and gradient settings
-      if (newSettings.baseCurrency !== settings.baseCurrency ||
-          newSettings.gradientStartColor !== settings.gradientStartColor ||
-          newSettings.gradientEndColor !== settings.gradientEndColor ||
-          newSettings.gradientAngle !== settings.gradientAngle) {
-        // Try to update gradient settings
-        const updateResult = await supabase.from('user_settings').update({
-          base_currency: newSettings.baseCurrency,
-          gradient_start_color: newSettings.gradientStartColor,
-          gradient_end_color: newSettings.gradientEndColor,
-          gradient_angle: newSettings.gradientAngle
-        }).eq('id', userId);
-
-        // If gradient columns don't exist, update only base_currency
-        if (updateResult.error) {
-          console.log('Gradient columns not found, updating base_currency only:', updateResult.error.message);
-          await supabase.from('user_settings').update({
-            base_currency: newSettings.baseCurrency
-          }).eq('id', userId);
-        }
+      // Save warranties
+      for (const warranty of newSettings.warranties) {
+        await saveWarranty(warranty);
       }
 
-      // Update local state
-      setSettings(newSettings);
+      // Delete removed warranties
+      const removedWarranties = settings.warranties.filter(
+        w => !newSettings.warranties.find(nw => nw.id === w.id)
+      );
+      for (const warranty of removedWarranties) {
+        await deleteWarrantyDB(warranty.id);
+      }
+
+      // Reload
+      await loadUserData();
     } catch (error) {
       console.error('Error updating settings:', error);
       alert('Failed to save settings. Please try again.');
@@ -982,7 +663,7 @@ const App: React.FC = () => {
     return <ResetPassword />;
   }
 
-  if (loading) {
+  if (loading || migrating) {
     const gradient = `linear-gradient(${settings.gradientAngle || 135}deg, ${settings.gradientStartColor || '#d0dddf'} 0%, ${settings.gradientEndColor || '#dcfefb'} 100%)`;
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: gradient }}>
@@ -990,7 +671,7 @@ const App: React.FC = () => {
           <div className="w-16 h-16 bg-brand-600 rounded-2xl flex items-center justify-center text-white font-bold text-3xl shadow-lg mx-auto mb-4">
             F
           </div>
-          <p className="text-slate-600">Loading...</p>
+          <p className="text-slate-600">{migrating ? 'Migrating data to local storage...' : 'Loading...'}</p>
         </div>
       </div>
     );
@@ -1000,10 +681,36 @@ const App: React.FC = () => {
     return <Auth onAuthSuccess={loadUserData} />;
   }
 
+  // Biometric lock check
+  if (biometricLocked) {
+    return (
+      <BiometricLock
+        onUnlock={async () => {
+          const enabled = await isBiometricEnabled();
+          if (!enabled) {
+            setBiometricLocked(false);
+          } else {
+            setBiometricLocked(false);
+          }
+        }}
+      />
+    );
+  }
+
   const gradient = `linear-gradient(${settings.gradientAngle || 135}deg, ${settings.gradientStartColor || '#d0dddf'} 0%, ${settings.gradientEndColor || '#dcfefb'} 100%)`;
 
   return (
     <div className="min-h-screen text-slate-900 font-sans max-w-md mx-auto relative shadow-2xl overflow-hidden flex flex-col" style={{ background: gradient }}>
+      {showBackupRestoreModal && (
+        <BackupRestoreModal
+          onClose={() => setShowBackupRestoreModal(false)}
+          onRestoreComplete={async () => {
+            setShowBackupRestoreModal(false);
+            await loadUserData();
+          }}
+        />
+      )}
+
       {/* Header */}
       {currentView !== 'settings' && (
         <header className="px-6 py-5 bg-white border-b border-slate-100 flex items-center justify-between sticky top-0 z-20">
