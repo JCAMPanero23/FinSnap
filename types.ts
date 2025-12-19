@@ -106,7 +106,10 @@ export interface Transaction {
   rawText?: string;
   tags?: string[];
 
-  // New: Snapshot of account status found in the message
+  // Receipt Management
+  receiptImage?: string; // Base64 image
+  keepReceipt?: boolean; // Prevent auto-deletion
+
   parsedMeta?: {
     availableBalance?: number;
     availableCredit?: number;
