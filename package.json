@@ -14,7 +14,11 @@
     "@capacitor/core": "^8.0.0",
     "@google/genai": "^1.33.0",
     "@supabase/supabase-js": "^2.87.1",
+    "capacitor-native-biometric": "^4.2.2",
+    "idb": "^8.0.3",
+    "jszip": "^3.10.1",
     "lucide-react": "^0.561.0",
+    "papaparse": "^5.5.3",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "recharts": "^3.5.1",
@@ -22,6 +26,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
+    "@types/papaparse": "^5.5.2",
     "@vitejs/plugin-react": "^5.0.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
