@@ -16,6 +16,9 @@ interface DashboardProps {
   onPreviousPeriod: () => void;
   onNextPeriod: () => void;
   currentPeriodLabel: string;
+  gradientStartColor?: string;
+  gradientEndColor?: string;
+  gradientAngle?: number;
 }
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658'];
@@ -38,7 +41,10 @@ const Dashboard: React.FC<DashboardProps> = ({
   onCustomEndDateChange,
   onPreviousPeriod,
   onNextPeriod,
-  currentPeriodLabel
+  currentPeriodLabel,
+  gradientStartColor,
+  gradientEndColor,
+  gradientAngle
 }) => {
   // Dashboard view filter state
   const [viewFilter, setViewFilter] = useState<'all' | 'cash' | 'credit' | 'debt'>('all');
@@ -200,10 +206,12 @@ const Dashboard: React.FC<DashboardProps> = ({
     return labels[viewFilter] || 'All Spending';
   };
 
+  const gradient = `linear-gradient(${gradientAngle || 135}deg, ${gradientStartColor || '#d0dddf'} 0%, ${gradientEndColor || '#dcfefb'} 100%)`;
+
   return (
     <div className="relative -mx-6 -mt-6 -mb-24 min-h-screen">
       {/* Background Layer */}
-      <div className="absolute inset-0 -z-10" style={{ backgroundColor: '#8fb3d9' }} />
+      <div className="absolute inset-0 -z-10" style={{ background: gradient }} />
 
       {/* Content with padding restored */}
       <div className="relative px-6 pt-6 pb-24 space-y-6">

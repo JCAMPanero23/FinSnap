@@ -15,6 +15,9 @@ Stores user-level settings and preferences.
 CREATE TABLE user_settings (
   id UUID REFERENCES auth.users(id) PRIMARY KEY,
   base_currency TEXT NOT NULL DEFAULT 'USD',
+  gradient_start_color TEXT DEFAULT '#d0dddf',
+  gradient_end_color TEXT DEFAULT '#dcfefb',
+  gradient_angle INTEGER DEFAULT 135 CHECK (gradient_angle >= 0 AND gradient_angle <= 360),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -23,6 +26,9 @@ CREATE TABLE user_settings (
 **Columns:**
 - `id` - User ID from Supabase Auth
 - `base_currency` - User's preferred currency (e.g., 'USD', 'EUR', 'AED')
+- `gradient_start_color` - Starting color of background gradient (hex format, e.g., '#d0dddf')
+- `gradient_end_color` - Ending color of background gradient (hex format, e.g., '#dcfefb')
+- `gradient_angle` - Gradient angle in degrees (0-360, default 135 for diagonal)
 - `created_at` - Timestamp when settings were created
 - `updated_at` - Timestamp of last update
 

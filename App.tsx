@@ -18,6 +18,18 @@ import NavigationDrawer from './components/NavigationDrawer';
 import { Transaction, View, AppSettings, TransactionType, Category, Account, RecurringRule, SavingsGoal, WarrantyItem } from './types';
 import { v4 as uuidv4 } from 'uuid';
 
+const DEFAULT_SETTINGS: AppSettings = {
+  baseCurrency: 'USD',
+  categories: [],
+  accounts: [],
+  recurringRules: [],
+  savingsGoals: [],
+  warranties: [],
+  gradientStartColor: '#d0dddf',
+  gradientEndColor: '#dcfefb',
+  gradientAngle: 135
+};
+
 const App: React.FC = () => {
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -31,7 +43,10 @@ const App: React.FC = () => {
     accounts: [],
     recurringRules: [],
     savingsGoals: [],
-    warranties: []
+    warranties: [],
+    gradientStartColor: '#d0dddf',
+    gradientEndColor: '#dcfefb',
+    gradientAngle: 135
   });
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
@@ -147,7 +162,7 @@ const App: React.FC = () => {
       // Load settings
       const { data: userSettings } = await supabase
         .from('user_settings')
-        .select('base_currency')
+        .select('base_currency, gradient_start_color, gradient_end_color, gradient_angle')
         .eq('id', userId)
         .single();
 
@@ -234,7 +249,10 @@ const App: React.FC = () => {
         accounts: mappedAccounts,
         recurringRules: mappedRules,
         savingsGoals: [], // TODO: Load from database when table is created
-        warranties: [] // TODO: Load from database when table is created
+        warranties: [], // TODO: Load from database when table is created
+        gradientStartColor: userSettings?.gradient_start_color || '#d0dddf',
+        gradientEndColor: userSettings?.gradient_end_color || '#dcfefb',
+        gradientAngle: userSettings?.gradient_angle || 135
       });
 
       setTransactions(mappedTransactions);
@@ -699,10 +717,16 @@ const App: React.FC = () => {
         await supabase.from('recurring_rules').delete().eq('id', rule.id);
       }
 
-      // Update base currency
-      if (newSettings.baseCurrency !== settings.baseCurrency) {
+      // Update base currency and gradient settings
+      if (newSettings.baseCurrency !== settings.baseCurrency ||
+          newSettings.gradientStartColor !== settings.gradientStartColor ||
+          newSettings.gradientEndColor !== settings.gradientEndColor ||
+          newSettings.gradientAngle !== settings.gradientAngle) {
         await supabase.from('user_settings').update({
-          base_currency: newSettings.baseCurrency
+          base_currency: newSettings.baseCurrency,
+          gradient_start_color: newSettings.gradientStartColor,
+          gradient_end_color: newSettings.gradientEndColor,
+          gradient_angle: newSettings.gradientAngle
         }).eq('id', userId);
       }
 
@@ -809,6 +833,9 @@ const App: React.FC = () => {
             onPreviousPeriod={handlePreviousPeriod}
             onNextPeriod={handleNextPeriod}
             currentPeriodLabel={getCurrentPeriodLabel()}
+            gradientStartColor={settings.gradientStartColor}
+            gradientEndColor={settings.gradientEndColor}
+            gradientAngle={settings.gradientAngle}
           />
         );
       case 'add':
@@ -906,7 +933,25 @@ const App: React.FC = () => {
           />
         );
       default:
-        return <Dashboard transactions={transactions} accounts={settings.accounts} baseCurrency={settings.baseCurrency} />;
+        return (
+          <Dashboard
+            transactions={transactions}
+            accounts={settings.accounts}
+            baseCurrency={settings.baseCurrency}
+            dateFilter={dateFilter}
+            onDateFilterChange={handleDateFilterChange}
+            customStartDate={customStartDate}
+            customEndDate={customEndDate}
+            onCustomStartDateChange={setCustomStartDate}
+            onCustomEndDateChange={setCustomEndDate}
+            onPreviousPeriod={handlePreviousPeriod}
+            onNextPeriod={handleNextPeriod}
+            currentPeriodLabel={getCurrentPeriodLabel()}
+            gradientStartColor={settings.gradientStartColor}
+            gradientEndColor={settings.gradientEndColor}
+            gradientAngle={settings.gradientAngle}
+          />
+        );
     }
   };
 
@@ -915,8 +960,9 @@ const App: React.FC = () => {
   }
 
   if (loading) {
+    const gradient = `linear-gradient(${settings.gradientAngle || 135}deg, ${settings.gradientStartColor || '#d0dddf'} 0%, ${settings.gradientEndColor || '#dcfefb'} 100%)`;
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center" style={{ background: gradient }}>
         <div className="text-center">
           <div className="w-16 h-16 bg-brand-600 rounded-2xl flex items-center justify-center text-white font-bold text-3xl shadow-lg mx-auto mb-4">
             F
@@ -931,8 +977,10 @@ const App: React.FC = () => {
     return <Auth onAuthSuccess={loadUserData} />;
   }
 
+  const gradient = `linear-gradient(${settings.gradientAngle || 135}deg, ${settings.gradientStartColor || '#d0dddf'} 0%, ${settings.gradientEndColor || '#dcfefb'} 100%)`;
+
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans max-w-md mx-auto relative shadow-2xl overflow-hidden flex flex-col">
+    <div className="min-h-screen text-slate-900 font-sans max-w-md mx-auto relative shadow-2xl overflow-hidden flex flex-col" style={{ background: gradient }}>
       {/* Header */}
       {currentView !== 'settings' && (
         <header className="px-6 py-5 bg-white border-b border-slate-100 flex items-center justify-between sticky top-0 z-20">

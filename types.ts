@@ -79,6 +79,11 @@ export interface AppSettings {
   recurringRules: RecurringRule[];
   savingsGoals: SavingsGoal[];
   warranties: WarrantyItem[];
+
+  // Gradient Background Settings
+  gradientStartColor?: string; // Default: #d0dddf
+  gradientEndColor?: string; // Default: #dcfefb
+  gradientAngle?: number; // Default: 135 (degrees)
 }
 
 export interface Transaction {

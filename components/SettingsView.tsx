@@ -160,8 +160,10 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, onUpdateSettings,
     }
   };
 
+  const gradient = `linear-gradient(${settings.gradientAngle || 135}deg, ${settings.gradientStartColor || '#d0dddf'} 0%, ${settings.gradientEndColor || '#dcfefb'} 100%)`;
+
   return (
-    <div className="h-full flex flex-col pb-24 bg-slate-50 relative">
+    <div className="h-full flex flex-col pb-24 relative" style={{ background: gradient }}>
       <div className="px-6 py-4 bg-white border-b border-slate-100 sticky top-0 z-10 flex items-center justify-between">
         <h2 className="text-2xl font-bold text-slate-800">Settings</h2>
         <button 
@@ -212,6 +214,95 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, onUpdateSettings,
                <p className="mt-2 text-xs text-slate-500">
                  Transactions in other currencies will be converted to this currency using historical rates.
                </p>
+            </div>
+
+            {/* Gradient Background Settings */}
+            <div className="mt-6">
+              <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-3">Background Gradient</h3>
+              <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 space-y-4">
+                {/* Gradient Start Color */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-2">Start Color</label>
+                  <div className="flex gap-2 items-center">
+                    <input
+                      type="color"
+                      value={localSettings.gradientStartColor || '#d0dddf'}
+                      onChange={(e) => setLocalSettings(prev => ({ ...prev, gradientStartColor: e.target.value }))}
+                      className="w-16 h-10 rounded-lg border border-slate-200 cursor-pointer"
+                    />
+                    <input
+                      type="text"
+                      value={localSettings.gradientStartColor || '#d0dddf'}
+                      onChange={(e) => setLocalSettings(prev => ({ ...prev, gradientStartColor: e.target.value }))}
+                      className="flex-1 p-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-mono text-sm focus:ring-2 focus:ring-brand-500 outline-none"
+                      placeholder="#d0dddf"
+                    />
+                  </div>
+                </div>
+
+                {/* Gradient End Color */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-2">End Color</label>
+                  <div className="flex gap-2 items-center">
+                    <input
+                      type="color"
+                      value={localSettings.gradientEndColor || '#dcfefb'}
+                      onChange={(e) => setLocalSettings(prev => ({ ...prev, gradientEndColor: e.target.value }))}
+                      className="w-16 h-10 rounded-lg border border-slate-200 cursor-pointer"
+                    />
+                    <input
+                      type="text"
+                      value={localSettings.gradientEndColor || '#dcfefb'}
+                      onChange={(e) => setLocalSettings(prev => ({ ...prev, gradientEndColor: e.target.value }))}
+                      className="flex-1 p-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-mono text-sm focus:ring-2 focus:ring-brand-500 outline-none"
+                      placeholder="#dcfefb"
+                    />
+                  </div>
+                </div>
+
+                {/* Gradient Angle */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-2">
+                    Gradient Angle: {localSettings.gradientAngle || 135}°
+                  </label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="360"
+                    step="15"
+                    value={localSettings.gradientAngle || 135}
+                    onChange={(e) => setLocalSettings(prev => ({ ...prev, gradientAngle: parseInt(e.target.value) }))}
+                    className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer"
+                    style={{
+                      background: `linear-gradient(to right,
+                        ${localSettings.gradientStartColor || '#d0dddf'},
+                        ${localSettings.gradientEndColor || '#dcfefb'})`
+                    }}
+                  />
+                  <div className="flex justify-between text-xs text-slate-400 mt-1">
+                    <span>0°</span>
+                    <span>90°</span>
+                    <span>180°</span>
+                    <span>270°</span>
+                    <span>360°</span>
+                  </div>
+                </div>
+
+                {/* Preview */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-2">Preview</label>
+                  <div
+                    className="w-full h-20 rounded-lg border border-slate-200"
+                    style={{
+                      background: `linear-gradient(${localSettings.gradientAngle || 135}deg, ${localSettings.gradientStartColor || '#d0dddf'} 0%, ${localSettings.gradientEndColor || '#dcfefb'} 100%)`
+                    }}
+                  />
+                </div>
+
+                <p className="text-xs text-slate-500">
+                  Customize the background gradient that appears across all app views.
+                </p>
+              </div>
             </div>
           </section>
         )}
