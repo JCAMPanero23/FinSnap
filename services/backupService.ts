@@ -294,3 +294,28 @@ export async function restoreFromBackup(csv: string, receiptsBlob: Blob): Promis
 
   console.log('Restore completed successfully');
 }
+
+export async function shouldAutoBackup(): Promise<boolean> {
+  const enabled = await getSetting('autoBackupMonthly');
+  if (!enabled) return false;
+
+  const lastBackup = await getSetting('lastAutoBackup');
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${now.getMonth() + 1}`;
+
+  // Check if we already backed up this month
+  if (lastBackup === currentMonth) return false;
+
+  // Check if it's the last day of the month
+  const tomorrow = new Date(now);
+  tomorrow.setDate(now.getDate() + 1);
+  const isLastDayOfMonth = tomorrow.getMonth() !== now.getMonth();
+
+  return isLastDayOfMonth;
+}
+
+export async function markAutoBackupComplete(): Promise<void> {
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${now.getMonth() + 1}`;
+  await saveSetting('lastAutoBackup', currentMonth);
+}
