@@ -8,7 +8,15 @@ import {
   getAllRecurringRules,
   getAllWarranties,
   getSetting,
+  saveTransaction,
+  saveAccount,
+  saveCategory,
+  saveRecurringRule,
+  saveWarranty,
+  saveSetting,
+  clearAllData,
 } from './indexedDBService';
+import { Transaction, Account, Category, RecurringRule, WarrantyItem } from '../types';
 
 interface BackupRow {
   type: string;
@@ -147,4 +155,142 @@ export async function uploadBackup(userId: string, csv: string, receiptsBlob: Bl
   }
 
   console.log(`Backup uploaded to ${folderPath}`);
+}
+
+export interface BackupInfo {
+  path: string;
+  timestamp: number;
+  date: string;
+  size?: number;
+}
+
+export async function listBackups(userId: string): Promise<BackupInfo[]> {
+  const { data: files, error } = await supabase.storage
+    .from('backups')
+    .list(`backups/${userId}`, {
+      limit: 100,
+      sortBy: { column: 'created_at', order: 'desc' },
+    });
+
+  if (error) {
+    throw new Error(`Failed to list backups: ${error.message}`);
+  }
+
+  const backups: BackupInfo[] = files
+    .filter((f) => f.name && !f.name.includes('.'))
+    .map((f) => {
+      const timestamp = parseInt(f.name);
+      return {
+        path: `backups/${userId}/${f.name}`,
+        timestamp,
+        date: new Date(timestamp).toLocaleString(),
+        size: f.metadata?.size,
+      };
+    });
+
+  return backups;
+}
+
+export async function downloadBackup(backupPath: string): Promise<{ csv: string; receiptsBlob: Blob }> {
+  // Download CSV
+  const { data: csvData, error: csvError } = await supabase.storage
+    .from('backups')
+    .download(`${backupPath}/data.csv`);
+
+  if (csvError || !csvData) {
+    throw new Error(`Failed to download CSV: ${csvError?.message}`);
+  }
+
+  const csv = await csvData.text();
+
+  // Download receipts ZIP
+  const { data: zipData, error: zipError } = await supabase.storage
+    .from('backups')
+    .download(`${backupPath}/receipts.zip`);
+
+  if (zipError || !zipData) {
+    throw new Error(`Failed to download receipts: ${zipError?.message}`);
+  }
+
+  return { csv, receiptsBlob: zipData };
+}
+
+export async function restoreFromBackup(csv: string, receiptsBlob: Blob): Promise<void> {
+  console.log('Starting restore from backup...');
+
+  // Parse CSV
+  const parsed = Papa.parse<BackupRow>(csv, { header: true });
+  if (parsed.errors.length > 0) {
+    throw new Error(`CSV parsing failed: ${parsed.errors[0].message}`);
+  }
+
+  // Extract receipts from ZIP
+  const zip = await JSZip.loadAsync(receiptsBlob);
+  const receiptFiles: { [key: string]: string } = {};
+
+  const receiptsFolder = zip.folder('receipts');
+  if (receiptsFolder) {
+    const files = Object.keys(zip.files).filter((name) => name.startsWith('receipts/'));
+    for (const filename of files) {
+      const file = zip.files[filename];
+      if (!file.dir) {
+        const base64 = await file.async('base64');
+        const ext = filename.split('.').pop();
+        const mimeType = ext === 'png' ? 'image/png' : 'image/jpeg';
+        const dataUrl = `data:${mimeType};base64,${base64}`;
+
+        const key = filename.replace('receipts/', '').replace(/\.(jpg|png|gif|webp)$/, '');
+        receiptFiles[key] = dataUrl;
+      }
+    }
+  }
+
+  // Clear existing data
+  await clearAllData();
+
+  // Restore data
+  for (const row of parsed.data) {
+    try {
+      const data = JSON.parse(row.data_json);
+
+      switch (row.type) {
+        case 'transaction': {
+          const tx = data as Transaction;
+          // Restore receipt if exists
+          const receiptKey = `transaction_${tx.id}`;
+          if (receiptFiles[receiptKey]) {
+            tx.receiptImage = receiptFiles[receiptKey];
+          }
+          await saveTransaction(tx);
+          break;
+        }
+        case 'account':
+          await saveAccount(data as Account);
+          break;
+        case 'category':
+          await saveCategory(data as Category);
+          break;
+        case 'recurring_rule':
+          await saveRecurringRule(data as RecurringRule);
+          break;
+        case 'warranty': {
+          const warranty = data as WarrantyItem;
+          // Restore receipt if exists
+          const receiptKey = `warranty_${warranty.id}`;
+          if (receiptFiles[receiptKey]) {
+            warranty.receiptImage = receiptFiles[receiptKey];
+          }
+          await saveWarranty(warranty);
+          break;
+        }
+        case 'setting':
+          await saveSetting(row.id, data);
+          break;
+      }
+    } catch (err) {
+      console.error(`Failed to restore ${row.type} ${row.id}:`, err);
+    }
+  }
+
+  console.log('Restore completed successfully');
 }
