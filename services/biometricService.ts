@@ -29,6 +29,8 @@ export async function authenticate(): Promise<{ success: boolean; error?: string
       title: 'Biometric Authentication',
       subtitle: 'Unlock to access your data',
       description: 'Use your fingerprint or face to unlock',
+      useFallback: true,
+      negativeButtonText: 'Cancel',
     });
     return { success: true };
   } catch (error: any) {
