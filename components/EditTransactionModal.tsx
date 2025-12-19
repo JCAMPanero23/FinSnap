@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Transaction, TransactionType, Category, Account } from '../types';
 import { X, Save, Trash2, RefreshCw, BookmarkPlus } from 'lucide-react';
 
@@ -12,21 +12,36 @@ interface EditTransactionModalProps {
   onAddRule?: (merchant: string, category: string, type: TransactionType) => void;
 }
 
-const EditTransactionModal: React.FC<EditTransactionModalProps> = ({ 
-  transaction, 
-  categories, 
-  accounts, 
-  onSave, 
-  onDelete, 
+const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
+  transaction,
+  categories,
+  accounts,
+  onSave,
+  onDelete,
   onClose,
-  onAddRule 
+  onAddRule
 }) => {
   const [formData, setFormData] = useState<Transaction>({ ...transaction });
-  
+
   // Initialize conversion mode if data exists
   const [isConverting, setIsConverting] = useState(() => {
     return !!(transaction.originalAmount && transaction.originalAmount !== transaction.amount);
   });
+
+  const [receiptImage, setReceiptImage] = useState<string | undefined>(transaction?.receiptImage);
+  const [keepReceipt, setKeepReceipt] = useState<boolean>(transaction?.keepReceipt || false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleReceiptUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setReceiptImage(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   // Handle Account Selection Logic
   const handleAccountChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -78,7 +93,12 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSave(formData);
+    const updatedTransaction: Transaction = {
+      ...formData,
+      receiptImage,
+      keepReceipt,
+    };
+    onSave(updatedTransaction);
   };
 
   const toggleConversion = () => {
@@ -247,7 +267,7 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
           <div>
             <label className="block text-xs font-semibold text-slate-500 mb-1">Account</label>
             <div className="space-y-2">
-              <select 
+              <select
                 value={formData.accountId || 'OTHER_MANUAL'}
                 onChange={handleAccountChange}
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500 appearance-none"
@@ -257,10 +277,10 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                 ))}
                 <option value="OTHER_MANUAL">Other (Type Custom Name)</option>
               </select>
-              
+
               {(!formData.accountId) && (
-                 <input 
-                    type="text" 
+                 <input
+                    type="text"
                     placeholder="e.g. Visa ...1234"
                     value={formData.account || ''}
                     onChange={(e) => handleChange('account', e.target.value)}
@@ -268,6 +288,53 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
                   />
               )}
             </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Receipt</label>
+
+            {receiptImage ? (
+              <div className="relative">
+                <img
+                  src={receiptImage}
+                  alt="Receipt"
+                  className="w-full h-48 object-cover rounded-lg"
+                />
+                <button
+                  type="button"
+                  onClick={() => setReceiptImage(undefined)}
+                  className="absolute top-2 right-2 p-2 bg-red-500 text-white rounded-full hover:bg-red-600"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full px-4 py-3 border-2 border-dashed border-gray-300 rounded-lg hover:border-teal-500 transition text-gray-600"
+              >
+                Upload Receipt
+              </button>
+            )}
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleReceiptUpload}
+              className="hidden"
+            />
+
+            <label className="flex items-center gap-2 mt-3 text-sm">
+              <input
+                type="checkbox"
+                checked={keepReceipt}
+                onChange={(e) => setKeepReceipt(e.target.checked)}
+                className="rounded"
+              />
+              <span className="text-gray-700">Keep receipt permanently</span>
+            </label>
           </div>
 
           <div className="pt-4 flex gap-3">
