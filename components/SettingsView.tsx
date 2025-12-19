@@ -1,7 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AppSettings, Category, Account, AccountType, RecurringRule, TransactionType, Transaction } from '../types';
-import { Plus, X, Save, Trash2, RotateCcw, CreditCard, Wallet, Building2, Banknote, Tag, ArrowRight, RefreshCw } from 'lucide-react';
+import { Plus, X, Save, Trash2, RotateCcw, CreditCard, Wallet, Building2, Banknote, Tag, ArrowRight, RefreshCw, Fingerprint, Cloud } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
+import { isBiometricEnabled, setBiometricEnabled, isBiometricAvailable } from '../services/biometricService';
+import { getSetting, saveSetting } from '../services/indexedDBService';
+import BackupRestoreModal from './BackupRestoreModal';
 
 interface SettingsViewProps {
   settings: AppSettings;
@@ -20,7 +23,7 @@ const ACCOUNT_TYPES: AccountType[] = ['Bank', 'Credit Card', 'Cash', 'Wallet', '
 
 const SettingsView: React.FC<SettingsViewProps> = ({ settings, onUpdateSettings, onBack, transactions }) => {
   const [localSettings, setLocalSettings] = useState<AppSettings>(JSON.parse(JSON.stringify(settings)));
-  const [activeTab, setActiveTab] = useState<'general' | 'categories' | 'accounts' | 'rules' | 'developer'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'categories' | 'accounts' | 'rules' | 'security' | 'backup' | 'developer'>('general');
 
   // Category State
   const [newCategoryName, setNewCategoryName] = useState('');
@@ -37,8 +40,40 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, onUpdateSettings,
     type: TransactionType.EXPENSE
   });
 
+  // Security State
+  const [biometricEnabled, setBiometricEnabledState] = useState(false);
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [autoBackupMonthly, setAutoBackupMonthly] = useState(false);
+  const [showBackupModal, setShowBackupModal] = useState(false);
+
   // Calculate orphaned transactions count
   const orphanedTransactionsCount = transactions?.filter(t => !t.accountId).length || 0;
+
+  useEffect(() => {
+    loadSecuritySettings();
+  }, []);
+
+  const loadSecuritySettings = async () => {
+    const enabled = await isBiometricEnabled();
+    const available = await isBiometricAvailable();
+    const autoBackup = await getSetting('autoBackupMonthly');
+
+    setBiometricEnabledState(enabled);
+    setBiometricAvailable(available);
+    setAutoBackupMonthly(autoBackup === true);
+  };
+
+  const toggleBiometric = async () => {
+    const newValue = !biometricEnabled;
+    await setBiometricEnabled(newValue);
+    setBiometricEnabledState(newValue);
+  };
+
+  const toggleAutoBackup = async () => {
+    const newValue = !autoBackupMonthly;
+    await saveSetting('autoBackupMonthly', newValue);
+    setAutoBackupMonthly(newValue);
+  };
 
   // --- Category Handlers ---
   const handleAddCategory = () => {
@@ -176,7 +211,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, onUpdateSettings,
 
       {/* Tabs */}
       <div className="flex p-2 bg-white border-b border-slate-100 gap-2 overflow-x-auto">
-        {(['general', 'categories', 'accounts', 'rules', 'developer'] as const).map(tab => (
+        {(['general', 'categories', 'accounts', 'rules', 'security', 'backup', 'developer'] as const).map(tab => (
            <button
              key={tab}
              onClick={() => setActiveTab(tab)}
@@ -184,7 +219,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, onUpdateSettings,
                activeTab === tab ? 'bg-brand-50 text-brand-700' : 'text-slate-500 hover:bg-slate-50'
              }`}
            >
-             {tab === 'rules' ? 'Helpers' : tab}
+             {tab === 'rules' ? 'Helpers' : tab === 'backup' ? 'Backup & Restore' : tab}
            </button>
         ))}
       </div>
@@ -551,6 +586,88 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, onUpdateSettings,
           </section>
         )}
 
+        {/* Security Tab */}
+        {activeTab === 'security' && (
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                <Fingerprint className="w-5 h-5" />
+                Biometric Authentication
+              </h3>
+
+              {!biometricAvailable ? (
+                <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <p className="text-sm text-yellow-800">
+                    Biometric authentication is not available on this device.
+                  </p>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                  <div>
+                    <div className="font-medium text-gray-800">Enable Biometric Lock</div>
+                    <div className="text-sm text-gray-600 mt-1">
+                      Require fingerprint/face unlock on app startup
+                    </div>
+                  </div>
+                  <button
+                    onClick={toggleBiometric}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
+                      biometricEnabled ? 'bg-teal-600' : 'bg-gray-300'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${
+                        biometricEnabled ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'backup' && (
+          <div className="space-y-6">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                <Cloud className="w-5 h-5" />
+                Cloud Backup
+              </h3>
+
+              <div className="space-y-4">
+                <button
+                  onClick={() => setShowBackupModal(true)}
+                  className="w-full px-6 py-3 bg-teal-600 text-white rounded-lg font-medium hover:bg-teal-700 transition"
+                >
+                  Manage Backups
+                </button>
+
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                  <div>
+                    <div className="font-medium text-gray-800">Auto-backup Monthly</div>
+                    <div className="text-sm text-gray-600 mt-1">
+                      Automatically backup on the last day of each month
+                    </div>
+                  </div>
+                  <button
+                    onClick={toggleAutoBackup}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
+                      autoBackupMonthly ? 'bg-teal-600' : 'bg-gray-300'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${
+                        autoBackupMonthly ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Developer Tab */}
         {activeTab === 'developer' && (
           <section className="animate-in fade-in slide-in-from-right-4 duration-300">
@@ -788,6 +905,16 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, onUpdateSettings,
                </div>
            </div>
         </div>
+      )}
+
+      {showBackupModal && (
+        <BackupRestoreModal
+          onClose={() => setShowBackupModal(false)}
+          onRestoreComplete={() => {
+            setShowBackupModal(false);
+            window.location.reload();
+          }}
+        />
       )}
     </div>
   );
