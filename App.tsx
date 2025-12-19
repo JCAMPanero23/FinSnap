@@ -13,7 +13,8 @@ import CalendarView from './components/CalendarView';
 import PlanningView from './components/PlanningView';
 import CategoriesView from './components/CategoriesView';
 import WarrantiesView from './components/WarrantiesView';
-import RadialNavigation from './components/RadialNavigation';
+import BottomTabs from './components/BottomTabs';
+import NavigationDrawer from './components/NavigationDrawer';
 import { Transaction, View, AppSettings, TransactionType, Category, Account, RecurringRule, SavingsGoal, WarrantyItem } from './types';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -22,6 +23,7 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [isResetPasswordPage, setIsResetPasswordPage] = useState(false);
   const [currentView, setCurrentView] = useState<View>('dashboard');
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [settings, setSettings] = useState<AppSettings>({
     baseCurrency: 'USD',
@@ -822,19 +824,37 @@ const App: React.FC = () => {
         return (
           <AccountsView
             accounts={settings.accounts}
-            transactions={transactions}
+            transactions={filteredTransactions}
             onSelectAccount={handleAccountSelect}
+            dateFilter={dateFilter}
+            onDateFilterChange={handleDateFilterChange}
+            customStartDate={customStartDate}
+            customEndDate={customEndDate}
+            onCustomStartDateChange={setCustomStartDate}
+            onCustomEndDateChange={setCustomEndDate}
+            onPreviousPeriod={handlePreviousPeriod}
+            onNextPeriod={handleNextPeriod}
+            currentPeriodLabel={getCurrentPeriodLabel()}
           />
         );
       case 'history':
         return (
           <TransactionList
-            transactions={transactions}
+            transactions={filteredTransactions}
             accounts={settings.accounts}
             onDelete={handleDeleteTransaction}
             onEdit={handleEditTransaction}
             initialFilterAccountId={selectedAccountId}
             onClearAccountFilter={() => setSelectedAccountId(null)}
+            dateFilter={dateFilter}
+            onDateFilterChange={handleDateFilterChange}
+            customStartDate={customStartDate}
+            customEndDate={customEndDate}
+            onCustomStartDateChange={setCustomStartDate}
+            onCustomEndDateChange={setCustomEndDate}
+            onPreviousPeriod={handlePreviousPeriod}
+            onNextPeriod={handleNextPeriod}
+            currentPeriodLabel={getCurrentPeriodLabel()}
           />
         );
       case 'calendar':
@@ -926,9 +946,6 @@ const App: React.FC = () => {
             <div className="text-xs font-medium px-2 py-1 bg-brand-50 text-brand-700 rounded-md border border-brand-100">
               {settings.baseCurrency}
             </div>
-            <button onClick={() => setCurrentView('settings')} className="text-slate-400 hover:text-slate-600">
-              <Settings size={20} />
-            </button>
             <button onClick={handleSignOut} className="text-slate-400 hover:text-slate-600" title="Sign Out">
               <LogOut size={20} />
             </button>
@@ -958,14 +975,23 @@ const App: React.FC = () => {
         />
       )}
 
-      {/* Radial Navigation (Only show if NOT in Add or Settings mode) */}
+      {/* Bottom Tabs Navigation (Only show if NOT in Add or Settings mode) */}
       {currentView !== 'add' && currentView !== 'settings' && (
-        <RadialNavigation
+        <BottomTabs
           currentView={currentView}
           onNavigate={setCurrentView}
           onAdd={() => setCurrentView('add')}
+          onDrawerOpen={() => setIsDrawerOpen(true)}
         />
       )}
+
+      {/* Navigation Drawer */}
+      <NavigationDrawer
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+        currentView={currentView}
+        onNavigate={setCurrentView}
+      />
     </div>
   );
 };

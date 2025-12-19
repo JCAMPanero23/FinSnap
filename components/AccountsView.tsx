@@ -1,15 +1,64 @@
 import React, { useMemo } from 'react';
 import { Account, Transaction, TransactionType } from '../types';
-import { CreditCard, Wallet, Building2, Banknote, AlertTriangle, CheckCircle2, ChevronRight, Calendar } from 'lucide-react';
+import { CreditCard, Wallet, Building2, Banknote, AlertTriangle, CheckCircle2, ChevronRight, ChevronLeft, Calendar } from 'lucide-react';
 
 interface AccountsViewProps {
   accounts: Account[];
   transactions: Transaction[];
   onSelectAccount: (accountId: string) => void;
+  dateFilter: 'month' | 'year' | 'week' | 'custom' | 'all';
+  onDateFilterChange: (filter: 'month' | 'year' | 'week' | 'custom' | 'all') => void;
+  customStartDate: string;
+  customEndDate: string;
+  onCustomStartDateChange: (date: string) => void;
+  onCustomEndDateChange: (date: string) => void;
+  onPreviousPeriod: () => void;
+  onNextPeriod: () => void;
+  currentPeriodLabel: string;
 }
 
-const AccountsView: React.FC<AccountsViewProps> = ({ accounts, transactions, onSelectAccount }) => {
-  
+const DATE_FILTER_TYPES: Array<'month' | 'year' | 'week' | 'custom' | 'all'> =
+  ['month', 'year', 'week', 'custom', 'all'];
+
+const AccountsView: React.FC<AccountsViewProps> = ({
+  accounts,
+  transactions,
+  onSelectAccount,
+  dateFilter,
+  onDateFilterChange,
+  customStartDate,
+  customEndDate,
+  onCustomStartDateChange,
+  onCustomEndDateChange,
+  onPreviousPeriod,
+  onNextPeriod,
+  currentPeriodLabel
+}) => {
+
+  // Date Filter Type Navigation
+  const handlePreviousFilterType = () => {
+    const currentIndex = DATE_FILTER_TYPES.indexOf(dateFilter);
+    const previousIndex = currentIndex === 0 ? DATE_FILTER_TYPES.length - 1 : currentIndex - 1;
+    onDateFilterChange(DATE_FILTER_TYPES[previousIndex]);
+  };
+
+  const handleNextFilterType = () => {
+    const currentIndex = DATE_FILTER_TYPES.indexOf(dateFilter);
+    const nextIndex = (currentIndex + 1) % DATE_FILTER_TYPES.length;
+    onDateFilterChange(DATE_FILTER_TYPES[nextIndex]);
+  };
+
+  const getFilterTypeLabel = () => {
+    const labels: Record<typeof dateFilter, string> = {
+      month: 'Month',
+      year: 'Year',
+      week: 'Week',
+      custom: 'Custom',
+      all: 'All Time'
+    };
+    return labels[dateFilter] || 'Month';
+  };
+
   const currentMonthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 
   const getAccountStats = (accountId: string) => {
@@ -61,6 +110,101 @@ const AccountsView: React.FC<AccountsViewProps> = ({ accounts, transactions, onS
 
   return (
     <div className="space-y-6 pb-24">
+      {/* Compact Month Selector Pill */}
+      <div className="bg-gradient-to-r from-brand-600 to-brand-500 rounded-full px-4 py-3 text-white shadow-md">
+        <div className="flex items-center justify-between">
+          {dateFilter !== 'all' ? (
+            <>
+              <button
+                onClick={onPreviousPeriod}
+                className="p-1 hover:bg-white/20 rounded-full transition-all active:scale-95"
+                title="Previous period"
+              >
+                <ChevronLeft size={18} />
+              </button>
+              <div className="text-center flex-1 px-3">
+                <div className="flex items-center justify-center gap-1">
+                  <button
+                    onClick={handlePreviousFilterType}
+                    className="p-0.5 hover:bg-white/20 rounded transition-all active:scale-95"
+                    title="Previous filter type"
+                  >
+                    <ChevronLeft size={12} />
+                  </button>
+                  <div className="text-xs font-bold uppercase tracking-wide opacity-90 min-w-[60px] text-center">
+                    {getFilterTypeLabel()}
+                  </div>
+                  <button
+                    onClick={handleNextFilterType}
+                    className="p-0.5 hover:bg-white/20 rounded transition-all active:scale-95"
+                    title="Next filter type"
+                  >
+                    <ChevronRight size={12} />
+                  </button>
+                </div>
+                <div className="font-semibold text-sm mt-1.5">{currentPeriodLabel}</div>
+              </div>
+              <button
+                onClick={onNextPeriod}
+                className="p-1 hover:bg-white/20 rounded-full transition-all active:scale-95"
+                title="Next period"
+              >
+                <ChevronRight size={18} />
+              </button>
+            </>
+          ) : (
+            <div className="text-center flex-1 px-3">
+              <div className="flex items-center justify-center gap-1">
+                <button
+                  onClick={handlePreviousFilterType}
+                  className="p-0.5 hover:bg-white/20 rounded transition-all active:scale-95"
+                  title="Previous filter type"
+                >
+                  <ChevronLeft size={12} />
+                </button>
+                <div className="text-xs font-bold uppercase tracking-wide opacity-90 min-w-[60px] text-center">
+                  {getFilterTypeLabel()}
+                </div>
+                <button
+                  onClick={handleNextFilterType}
+                  className="p-0.5 hover:bg-white/20 rounded transition-all active:scale-95"
+                  title="Next filter type"
+                >
+                  <ChevronRight size={12} />
+                </button>
+              </div>
+              <div className="font-semibold text-sm mt-1.5">All Transactions</div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Custom Date Range Inputs */}
+      {dateFilter === 'custom' && (
+        <div className="bg-white rounded-xl p-4 shadow-md border border-slate-100">
+          <div className="flex gap-3 text-sm">
+            <div className="flex-1">
+              <label className="text-slate-600 text-xs font-medium mb-1.5 block">From Date</label>
+              <input
+                type="date"
+                value={customStartDate}
+                onChange={(e) => onCustomStartDateChange(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition-colors"
+              />
+            </div>
+            <div className="flex-1">
+              <label className="text-slate-600 text-xs font-medium mb-1.5 block">To Date</label>
+              <input
+                type="date"
+                value={customEndDate}
+                onChange={(e) => onCustomEndDateChange(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition-colors"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Net Worth Header */}
       <div className="bg-slate-800 rounded-2xl p-6 text-white shadow-lg">
         <h2 className="text-slate-400 text-sm font-medium mb-1">Total Net Worth</h2>

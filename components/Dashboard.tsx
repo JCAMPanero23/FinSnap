@@ -20,6 +20,12 @@ interface DashboardProps {
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658'];
 
+const DATE_FILTER_TYPES: Array<'month' | 'year' | 'week' | 'custom' | 'all'> =
+  ['month', 'year', 'week', 'custom', 'all'];
+
+const VIEW_FILTER_TYPES: Array<'all' | 'cash' | 'credit' | 'debt'> =
+  ['all', 'cash', 'credit', 'debt'];
+
 const Dashboard: React.FC<DashboardProps> = ({
   transactions,
   accounts,
@@ -147,38 +153,187 @@ const Dashboard: React.FC<DashboardProps> = ({
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     .slice(0, 5);
 
+  // Date Filter Type Navigation
+  const handlePreviousFilterType = () => {
+    const currentIndex = DATE_FILTER_TYPES.indexOf(dateFilter);
+    const previousIndex = currentIndex === 0 ? DATE_FILTER_TYPES.length - 1 : currentIndex - 1;
+    onDateFilterChange(DATE_FILTER_TYPES[previousIndex]);
+  };
+
+  const handleNextFilterType = () => {
+    const currentIndex = DATE_FILTER_TYPES.indexOf(dateFilter);
+    const nextIndex = (currentIndex + 1) % DATE_FILTER_TYPES.length;
+    onDateFilterChange(DATE_FILTER_TYPES[nextIndex]);
+  };
+
+  const getFilterTypeLabel = () => {
+    const labels: Record<typeof dateFilter, string> = {
+      month: 'Month',
+      year: 'Year',
+      week: 'Week',
+      custom: 'Custom',
+      all: 'All Time'
+    };
+    return labels[dateFilter] || 'Month';
+  };
+
+  // View Filter Navigation
+  const handlePreviousViewFilter = () => {
+    const currentIndex = VIEW_FILTER_TYPES.indexOf(viewFilter);
+    const previousIndex = currentIndex === 0 ? VIEW_FILTER_TYPES.length - 1 : currentIndex - 1;
+    setViewFilter(VIEW_FILTER_TYPES[previousIndex]);
+  };
+
+  const handleNextViewFilter = () => {
+    const currentIndex = VIEW_FILTER_TYPES.indexOf(viewFilter);
+    const nextIndex = (currentIndex + 1) % VIEW_FILTER_TYPES.length;
+    setViewFilter(VIEW_FILTER_TYPES[nextIndex]);
+  };
+
+  const getViewFilterLabel = () => {
+    const labels: Record<typeof viewFilter, string> = {
+      all: 'All Spending',
+      cash: 'Cash Only',
+      credit: 'Credit Only',
+      debt: 'Debt Overview'
+    };
+    return labels[viewFilter] || 'All Spending';
+  };
+
   return (
-    <div className="space-y-6 pb-24">
-      {/* Compact Month Selector Pill */}
-      <div className="bg-gradient-to-r from-brand-600 to-brand-500 rounded-full px-4 py-3 text-white shadow-lg">
+    <div className="relative -mx-6 -mt-6 -mb-24 min-h-screen">
+      {/* Background Layer */}
+      <div className="absolute inset-0 -z-10" style={{ backgroundColor: '#8fb3d9' }} />
+
+      {/* Content with padding restored */}
+      <div className="relative px-6 pt-6 pb-24 space-y-6">
+        {/* Compact Month Selector Pill */}
+      <div className="bg-gradient-to-r from-brand-600 to-brand-500 rounded-full px-4 py-3 text-white shadow-md">
         <div className="flex items-center justify-between">
-          <button
-            onClick={onPreviousPeriod}
-            className="p-1 hover:bg-white/20 rounded-full transition-all active:scale-95"
-            title="Previous"
-          >
-            <ChevronLeft size={18} />
-          </button>
-          <div className="text-center flex-1 px-3">
-            <div className="text-[10px] font-semibold uppercase tracking-wide opacity-80">Month</div>
-            <div className="font-bold text-sm">{currentPeriodLabel}</div>
-          </div>
-          <button
-            onClick={onNextPeriod}
-            className="p-1 hover:bg-white/20 rounded-full transition-all active:scale-95"
-            title="Next"
-          >
-            <ChevronRight size={18} />
-          </button>
+          {dateFilter !== 'all' ? (
+            <>
+              <button
+                onClick={onPreviousPeriod}
+                className="p-1 hover:bg-white/20 rounded-full transition-all active:scale-95"
+                title="Previous period"
+              >
+                <ChevronLeft size={18} />
+              </button>
+              <div className="text-center flex-1 px-3">
+                <div className="flex items-center justify-center gap-1">
+                  <button
+                    onClick={handlePreviousFilterType}
+                    className="p-0.5 hover:bg-white/20 rounded transition-all active:scale-95"
+                    title="Previous filter type"
+                  >
+                    <ChevronLeft size={12} />
+                  </button>
+                  <div className="text-xs font-bold uppercase tracking-wide opacity-90 min-w-[60px] text-center">
+                    {getFilterTypeLabel()}
+                  </div>
+                  <button
+                    onClick={handleNextFilterType}
+                    className="p-0.5 hover:bg-white/20 rounded transition-all active:scale-95"
+                    title="Next filter type"
+                  >
+                    <ChevronRight size={12} />
+                  </button>
+                </div>
+                <div className="font-semibold text-sm mt-1.5">{currentPeriodLabel}</div>
+              </div>
+              <button
+                onClick={onNextPeriod}
+                className="p-1 hover:bg-white/20 rounded-full transition-all active:scale-95"
+                title="Next period"
+              >
+                <ChevronRight size={18} />
+              </button>
+            </>
+          ) : (
+            <div className="text-center flex-1 px-3">
+              <div className="flex items-center justify-center gap-1">
+                <button
+                  onClick={handlePreviousFilterType}
+                  className="p-0.5 hover:bg-white/20 rounded transition-all active:scale-95"
+                  title="Previous filter type"
+                >
+                  <ChevronLeft size={12} />
+                </button>
+                <div className="text-xs font-bold uppercase tracking-wide opacity-90 min-w-[60px] text-center">
+                  {getFilterTypeLabel()}
+                </div>
+                <button
+                  onClick={handleNextFilterType}
+                  className="p-0.5 hover:bg-white/20 rounded transition-all active:scale-95"
+                  title="Next filter type"
+                >
+                  <ChevronRight size={12} />
+                </button>
+              </div>
+              <div className="font-semibold text-sm mt-1.5">All Transactions</div>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Custom Date Range Inputs */}
+      {dateFilter === 'custom' && (
+        <div className="bg-white rounded-xl p-4 shadow-md border border-slate-100">
+          <div className="flex gap-3 text-sm">
+            <div className="flex-1">
+              <label className="text-slate-600 text-xs font-medium mb-1.5 block">From Date</label>
+              <input
+                type="date"
+                value={customStartDate}
+                onChange={(e) => onCustomStartDateChange(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition-colors"
+              />
+            </div>
+            <div className="flex-1">
+              <label className="text-slate-600 text-xs font-medium mb-1.5 block">To Date</label>
+              <input
+                type="date"
+                value={customEndDate}
+                onChange={(e) => onCustomEndDateChange(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition-colors"
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Debt Overview Section */}
       {viewFilter === 'debt' && (
         <div className="space-y-4">
-          <div className="bg-gradient-to-br from-orange-500 to-red-500 rounded-2xl p-6 text-white shadow-lg">
-            <h2 className="text-sm font-bold opacity-90 mb-1">Total Debt</h2>
-            <div className="text-3xl font-bold">{displayCurrency} {totalDebt.toFixed(2)}</div>
+          <div className="bg-gradient-to-br from-orange-200 via-orange-300 to-red-200 rounded-2xl p-6 text-slate-800 shadow-md">
+            {/* Header with View Filter Navigation */}
+            <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center gap-2">
+                <CreditCard size={16} />
+                <h2 className="text-sm font-medium">Total Debt</h2>
+              </div>
+              {/* Filter Navigation */}
+              <div className="flex items-center gap-2 bg-white/40 rounded-full px-2 py-1.5 border border-orange-300/50">
+                <button
+                  onClick={handlePreviousViewFilter}
+                  className="p-0.5 hover:bg-white/40 rounded-full transition-all active:scale-95"
+                  title="Previous view"
+                >
+                  <ChevronLeft size={14} className="text-slate-700" />
+                </button>
+                <div className="text-xs font-semibold text-slate-800 min-w-[100px] text-center">
+                  {getViewFilterLabel()}
+                </div>
+                <button
+                  onClick={handleNextViewFilter}
+                  className="p-0.5 hover:bg-white/40 rounded-full transition-all active:scale-95"
+                  title="Next view"
+                >
+                  <ChevronRight size={14} className="text-slate-700" />
+                </button>
+              </div>
+            </div>
+            <div className="text-3xl font-bold mt-2">{displayCurrency} {totalDebt.toFixed(2)}</div>
           </div>
 
           <div className="space-y-3">
@@ -236,7 +391,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           </div>
 
           {recentCreditTransactions.length > 0 && (
-            <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
+            <div className="bg-white rounded-xl p-4 shadow-md border border-slate-100">
               <h3 className="font-bold text-slate-800 mb-3">Recent Credit Card Transactions</h3>
               <div className="space-y-2">
                 {recentCreditTransactions.map(t => (
@@ -257,30 +412,33 @@ const Dashboard: React.FC<DashboardProps> = ({
       )}
 
       {/* Balance Card with View Filter */}
-      <div className="bg-gradient-to-br from-brand-900 to-brand-600 rounded-2xl p-6 text-white shadow-lg">
+      {viewFilter !== 'debt' && (
+      <div className="bg-gradient-to-br from-brand-900 to-brand-600 rounded-2xl p-6 text-white shadow-md">
         {/* Header with Inline Filter Selector */}
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-center gap-2 opacity-80">
             <Wallet size={16} />
             <h2 className="text-sm font-medium">Total Net Worth</h2>
           </div>
-          {/* Filter Dropdown */}
-          <div className="relative">
-            <select
-              value={viewFilter}
-              onChange={(e) => setViewFilter(e.target.value as 'all' | 'cash' | 'credit' | 'debt')}
-              className="bg-white/20 text-white text-xs font-semibold px-3 py-1.5 rounded-full border border-white/30 cursor-pointer hover:bg-white/30 transition-all appearance-none pr-8"
-              style={{
-                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='white' d='M6 8L2 4h8z'/%3E%3C/svg%3E")`,
-                backgroundRepeat: 'no-repeat',
-                backgroundPosition: 'right 0.5rem center'
-              }}
+          {/* Filter Navigation */}
+          <div className="flex items-center gap-2 bg-white/20 rounded-full px-2 py-1.5 border border-white/30">
+            <button
+              onClick={handlePreviousViewFilter}
+              className="p-0.5 hover:bg-white/20 rounded-full transition-all active:scale-95"
+              title="Previous view"
             >
-              <option value="all" className="bg-brand-800 text-white">All Spending</option>
-              <option value="cash" className="bg-brand-800 text-white">Cash Only</option>
-              <option value="credit" className="bg-brand-800 text-white">Credit Only</option>
-              <option value="debt" className="bg-brand-800 text-white">Debt Overview</option>
-            </select>
+              <ChevronLeft size={14} className="text-white" />
+            </button>
+            <div className="text-xs font-semibold text-white min-w-[100px] text-center">
+              {getViewFilterLabel()}
+            </div>
+            <button
+              onClick={handleNextViewFilter}
+              className="p-0.5 hover:bg-white/20 rounded-full transition-all active:scale-95"
+              title="Next view"
+            >
+              <ChevronRight size={14} className="text-white" />
+            </button>
           </div>
         </div>
 
@@ -314,6 +472,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           </div>
         )}
       </div>
+      )}
 
       {viewFilter !== 'debt' && (
         <>
@@ -321,7 +480,7 @@ const Dashboard: React.FC<DashboardProps> = ({
 
       {/* Monthly Trends Chart */}
       {monthlyData.length > 0 && (
-        <div className="bg-gradient-to-br from-slate-50 to-white rounded-2xl p-6 shadow-sm border border-slate-100">
+        <div className="bg-gradient-to-br from-slate-50 to-white rounded-2xl p-6 shadow-md border border-slate-100">
            <h3 className="text-lg font-bold text-slate-800 mb-4">Monthly Trends</h3>
            <div className="h-[220px] w-full text-xs">
              <ResponsiveContainer width="100%" height="100%" minWidth={200} minHeight={220}>
@@ -345,7 +504,7 @@ const Dashboard: React.FC<DashboardProps> = ({
 
       {/* Spending Breakdown */}
       {categoryData.length > 0 && (
-        <div className="bg-gradient-to-br from-slate-50 to-white rounded-2xl p-6 shadow-sm border border-slate-100">
+        <div className="bg-gradient-to-br from-slate-50 to-white rounded-2xl p-6 shadow-md border border-slate-100">
           <h3 className="text-lg font-bold text-slate-800 mb-4">Spending Breakdown</h3>
           <div className="h-[200px] w-full">
             <ResponsiveContainer width="100%" height="100%" minWidth={200} minHeight={200}>
@@ -391,7 +550,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           </div>
         ) : (
           recentActivity.map((t) => (
-            <div key={t.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-50 flex items-center justify-between">
+            <div key={t.id} className="bg-white p-4 rounded-xl shadow-md border border-slate-50 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
                   t.type === TransactionType.EXPENSE ? 'bg-red-50 text-red-500' : 'bg-green-50 text-green-500'
@@ -414,6 +573,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       </div>
         </>
       )}
+      </div>
     </div>
   );
 };

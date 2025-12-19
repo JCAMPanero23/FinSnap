@@ -1,13 +1,14 @@
 import React, { useState, useMemo } from 'react';
 import { AppSettings, Category, Transaction, TransactionType } from '../types';
 import {
-  Plus, Trash2, Tag, Edit3, Check, X, Palette,
-  ShoppingBag, Utensils, Car, Zap, Film, Heart,
+  Tag, ShoppingBag, Utensils, Car, Zap, Film, Heart,
   Briefcase, ArrowRightLeft, MoreHorizontal, Home,
   Smartphone, Plane, Coffee, Gift, Music, Gamepad2,
   BookOpen, GraduationCap, Baby, Dog, Wrench, Wifi, Fuel, Calendar, ChevronLeft, ChevronRight
 } from 'lucide-react';
-import { v4 as uuidv4 } from 'uuid';
+import { useHoldGesture } from '../hooks/useHoldGesture';
+import CircularProgress from './CircularProgress';
+import CategorySummaryModal from './CategorySummaryModal';
 
 interface CategoriesViewProps {
   settings: AppSettings;
@@ -25,10 +26,13 @@ interface CategoriesViewProps {
 }
 
 const DEFAULT_COLORS = [
-  '#ef4444', '#f97316', '#f59e0b', '#84cc16', '#10b981', 
-  '#06b6d4', '#3b82f6', '#6366f1', '#8b5cf6', '#d946ef', 
+  '#ef4444', '#f97316', '#f59e0b', '#84cc16', '#10b981',
+  '#06b6d4', '#3b82f6', '#6366f1', '#8b5cf6', '#d946ef',
   '#f43f5e', '#64748b', '#78716c', '#000000'
 ];
+
+const DATE_FILTER_TYPES: Array<'month' | 'year' | 'week' | 'custom' | 'all'> =
+  ['month', 'year', 'week', 'custom', 'all'];
 
 // Map of available icons for the library
 const ICON_LIB: Record<string, any> = {
@@ -52,14 +56,32 @@ const CategoriesView: React.FC<CategoriesViewProps> = ({
   onNextPeriod,
   currentPeriodLabel
 }) => {
-  const [newCategoryName, setNewCategoryName] = useState('');
-  
-  // Budget Editing State
-  const [editingBudgetId, setEditingBudgetId] = useState<string | null>(null);
-  const [tempBudget, setTempBudget] = useState('');
+  // Hold Gesture State for modal
+  const [holdingCategory, setHoldingCategory] = useState<Category | null>(null);
 
-  // Category Editing State (Name, Color, Icon)
-  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+  // Date Filter Type Navigation
+  const handlePreviousFilterType = () => {
+    const currentIndex = DATE_FILTER_TYPES.indexOf(dateFilter);
+    const previousIndex = currentIndex === 0 ? DATE_FILTER_TYPES.length - 1 : currentIndex - 1;
+    onDateFilterChange(DATE_FILTER_TYPES[previousIndex]);
+  };
+
+  const handleNextFilterType = () => {
+    const currentIndex = DATE_FILTER_TYPES.indexOf(dateFilter);
+    const nextIndex = (currentIndex + 1) % DATE_FILTER_TYPES.length;
+    onDateFilterChange(DATE_FILTER_TYPES[nextIndex]);
+  };
+
+  const getFilterTypeLabel = () => {
+    const labels: Record<typeof dateFilter, string> = {
+      month: 'Month',
+      year: 'Year',
+      week: 'Week',
+      custom: 'Custom',
+      all: 'All Time'
+    };
+    return labels[dateFilter] || 'Month';
+  };
 
   // Calculate spending per category (transactions are already filtered by date in App.tsx)
   const categoryStats = useMemo(() => {
@@ -74,61 +96,6 @@ const CategoriesView: React.FC<CategoriesViewProps> = ({
     return stats;
   }, [transactions]);
 
-  const handleAddCategory = () => {
-    if (!newCategoryName.trim()) return;
-    const newCategory: Category = {
-      id: uuidv4(),
-      name: newCategoryName.trim(),
-      color: DEFAULT_COLORS[settings.categories.length % DEFAULT_COLORS.length],
-      icon: 'Tag'
-    };
-    onUpdateSettings({ ...settings, categories: [...settings.categories, newCategory] });
-    setNewCategoryName('');
-  };
-
-  const handleDeleteCategory = (id: string) => {
-    if (window.confirm("Delete this category? Transactions will remain but category metadata might be lost.")) {
-      onUpdateSettings({ ...settings, categories: settings.categories.filter(c => c.id !== id) });
-    }
-  };
-
-  // --- Budget Handlers ---
-  const startEditingBudget = (cat: Category) => {
-    setEditingBudgetId(cat.id);
-    setTempBudget(cat.monthlyBudget ? cat.monthlyBudget.toString() : '');
-  };
-
-  const saveBudget = (catId: string) => {
-    const updatedCategories = settings.categories.map(c => {
-      if (c.id === catId) {
-        return { ...c, monthlyBudget: tempBudget ? parseFloat(tempBudget) : undefined };
-      }
-      return c;
-    });
-    onUpdateSettings({ ...settings, categories: updatedCategories });
-    setEditingBudgetId(null);
-  };
-
-  // --- Category Edit Handlers ---
-  const startEditingCategory = (cat: Category) => {
-    setEditingCategory({ ...cat });
-    // Close other edits
-    setEditingBudgetId(null); 
-  };
-
-  const saveCategoryEdit = () => {
-    if (!editingCategory || !editingCategory.name.trim()) return;
-
-    const updatedCategories = settings.categories.map(c => {
-      if (c.id === editingCategory.id) {
-        return editingCategory;
-      }
-      return c;
-    });
-
-    onUpdateSettings({ ...settings, categories: updatedCategories });
-    setEditingCategory(null);
-  };
 
   const renderIcon = (iconName: string | undefined, size: number = 18) => {
      const IconComp = ICON_LIB[iconName || 'Tag'] || Tag;
@@ -146,262 +113,173 @@ const CategoriesView: React.FC<CategoriesViewProps> = ({
 
       <div className="p-6 flex-1 overflow-y-auto space-y-6">
 
-        {/* Date Filter */}
-        <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-100">
-          <div className="flex items-center gap-2 mb-3">
-            <Calendar size={16} className="text-brand-600" />
-            <h3 className="text-sm font-bold text-slate-700">Filter Period</h3>
-          </div>
-
-          <div className="flex flex-wrap gap-2 mb-3">
-            {(['all', 'month', 'year', 'week', 'custom'] as const).map((filter) => (
-              <button
-                key={filter}
-                onClick={() => onDateFilterChange(filter)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                  dateFilter === filter
-                    ? 'bg-brand-600 text-white shadow-sm'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                {filter === 'all' ? 'All Time' : filter.charAt(0).toUpperCase() + filter.slice(1)}
-              </button>
-            ))}
-          </div>
-
-          {/* Navigation Controls for Month/Year/Week */}
-          {(dateFilter === 'month' || dateFilter === 'year' || dateFilter === 'week') && (
-            <div className="flex items-center justify-between pt-3 border-t border-slate-100">
-              <button
-                onClick={onPreviousPeriod}
-                className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-600 hover:text-brand-600"
-                title="Previous"
-              >
-                <ChevronLeft size={20} />
-              </button>
-              <div className="text-sm font-semibold text-slate-700 text-center flex-1">
-                {currentPeriodLabel}
-              </div>
-              <button
-                onClick={onNextPeriod}
-                className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-600 hover:text-brand-600"
-                title="Next"
-              >
-                <ChevronRight size={20} />
-              </button>
-            </div>
-          )}
-
-          {dateFilter === 'custom' && (
-            <div className="flex gap-2 items-center pt-2 border-t border-slate-100">
-              <input
-                type="date"
-                value={customStartDate}
-                onChange={(e) => onCustomStartDateChange(e.target.value)}
-                className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-brand-500 outline-none"
-              />
-              <span className="text-slate-400 text-xs">to</span>
-              <input
-                type="date"
-                value={customEndDate}
-                onChange={(e) => onCustomEndDateChange(e.target.value)}
-                className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-brand-500 outline-none"
-              />
-            </div>
-          )}
-        </div>
-        
-        {/* Add New */}
-        <div className="bg-white rounded-xl p-2 shadow-sm border border-slate-200 flex gap-2">
-           <input 
-              type="text" 
-              placeholder="New Category Name..."
-              value={newCategoryName}
-              onChange={(e) => setNewCategoryName(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleAddCategory()}
-              className="flex-1 px-3 py-2 bg-slate-50 border border-slate-100 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-            />
-            <button 
-              onClick={handleAddCategory}
-              disabled={!newCategoryName.trim()}
-              className="p-2 bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50 transition-colors shadow-lg shadow-brand-500/30"
-            >
-              <Plus size={20} />
-            </button>
-        </div>
-
-        {/* List */}
-        <div className="space-y-4">
-           {settings.categories.map(cat => {
-             // Check if this category is being edited
-             const isEditing = editingCategory?.id === cat.id;
-
-             if (isEditing) {
-                return (
-                  <div key={cat.id} className="bg-white p-4 rounded-xl shadow-lg border border-brand-200 animate-in zoom-in-95 duration-200 space-y-4 relative z-10">
-                     <div>
-                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1 block">Name</label>
-                        <input 
-                          type="text" 
-                          value={editingCategory.name}
-                          onChange={(e) => setEditingCategory({ ...editingCategory, name: e.target.value })}
-                          className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 font-bold focus:ring-2 focus:ring-brand-500 outline-none"
-                        />
-                     </div>
-
-                     {/* Icon Picker */}
-                     <div>
-                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1">
-                           Icon
-                        </label>
-                        <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto p-2 bg-slate-50 rounded-lg border border-slate-100">
-                           {Object.keys(ICON_LIB).map(iconKey => {
-                              const IconComp = ICON_LIB[iconKey];
-                              return (
-                                <button
-                                  key={iconKey}
-                                  onClick={() => setEditingCategory({ ...editingCategory, icon: iconKey })}
-                                  className={`p-2 rounded-lg transition-all flex items-center justify-center ${
-                                    editingCategory.icon === iconKey 
-                                      ? 'bg-brand-100 text-brand-600 ring-2 ring-brand-500' 
-                                      : 'bg-white text-slate-400 hover:bg-slate-200'
-                                  }`}
-                                  title={iconKey}
-                                >
-                                  <IconComp size={18} />
-                                </button>
-                              );
-                           })}
-                        </div>
-                     </div>
-                     
-                     <div>
-                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1">
-                           <Palette size={12} /> Color
-                        </label>
-                        <div className="flex flex-wrap gap-2">
-                           {DEFAULT_COLORS.map(c => (
-                             <button
-                               key={c}
-                               onClick={() => setEditingCategory({ ...editingCategory, color: c })}
-                               className={`w-8 h-8 rounded-full border-2 transition-transform ${editingCategory.color === c ? 'border-slate-600 scale-110' : 'border-transparent'}`}
-                               style={{ backgroundColor: c }}
-                             />
-                           ))}
-                        </div>
-                     </div>
-
-                     <div className="flex gap-2 pt-2 border-t border-slate-100 mt-2">
-                        <button 
-                          onClick={() => setEditingCategory(null)}
-                          className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-semibold text-sm hover:bg-slate-200"
-                        >
-                          Cancel
-                        </button>
-                        <button 
-                          onClick={saveCategoryEdit}
-                          className="flex-1 py-3 bg-brand-600 text-white rounded-xl font-semibold text-sm hover:bg-brand-700 shadow-md"
-                        >
-                          Save Changes
-                        </button>
-                     </div>
-                  </div>
-                );
-             }
-
-             // Standard View
-             const spent = categoryStats[cat.name] || 0;
-             const budget = cat.monthlyBudget || 0;
-             const percentage = budget > 0 ? Math.min(100, (spent / budget) * 100) : 0;
-             const isOverBudget = budget > 0 && spent > budget;
-
-             return (
-               <div key={cat.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 relative group transition-all hover:shadow-md">
-                  <div className="flex justify-between items-start mb-2">
-                      <div className="flex items-center gap-3">
-                         <div 
-                           className="w-12 h-12 rounded-2xl flex items-center justify-center text-white font-bold shadow-sm transition-transform active:scale-95 cursor-pointer" 
-                           style={{ backgroundColor: cat.color }}
-                           onClick={() => startEditingCategory(cat)}
-                           title="Click to edit icon/color"
-                         >
-                           {renderIcon(cat.icon, 20)}
-                         </div>
-                         <div>
-                            <div className="font-bold text-slate-800 flex items-center gap-2">
-                               {cat.name}
-                               <button 
-                                 onClick={() => startEditingCategory(cat)} 
-                                 className="text-slate-300 hover:text-brand-600 transition-colors p-1.5 hover:bg-slate-50 rounded-full"
-                               >
-                                  <Edit3 size={14} />
-                               </button>
-                            </div>
-                            <div className="text-xs text-slate-400 font-medium">
-                               Spent: {settings.baseCurrency} {spent.toFixed(2)}
-                            </div>
-                         </div>
-                      </div>
-
-                      {/* Budget Edit Section */}
-                      <div className="text-right">
-                         {editingBudgetId === cat.id ? (
-                           <div className="flex items-center gap-1 justify-end animate-in fade-in duration-200">
-                              <span className="text-xs font-bold text-slate-400">$</span>
-                              <input 
-                                type="number" 
-                                autoFocus
-                                value={tempBudget}
-                                onChange={(e) => setTempBudget(e.target.value)}
-                                onKeyDown={(e) => e.key === 'Enter' && saveBudget(cat.id)}
-                                onBlur={() => saveBudget(cat.id)}
-                                className="w-20 p-1 text-sm border border-slate-300 rounded bg-slate-50 text-right focus:ring-2 focus:ring-brand-500 outline-none"
-                                placeholder="Budget"
-                              />
-                           </div>
-                         ) : (
-                           <div 
-                             onClick={() => startEditingBudget(cat)}
-                             className="text-xs text-slate-400 cursor-pointer hover:text-brand-600 flex items-center justify-end gap-1 p-1 hover:bg-slate-50 rounded transition-colors"
-                           >
-                             {budget > 0 ? `Budget: ${budget}` : 'Set Budget'}
-                             <Edit3 size={10} />
-                           </div>
-                         )}
-                         
-                         {isOverBudget && (
-                            <div className="text-[10px] text-red-500 font-bold mt-1 bg-red-50 px-1.5 py-0.5 rounded inline-block">Over Limit!</div>
-                         )}
-                      </div>
-                  </div>
-
-                  {/* Progress Bar */}
-                  <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden mt-3 relative">
-                     {budget > 0 ? (
-                       <div 
-                         className={`h-full rounded-full transition-all duration-500 ${isOverBudget ? 'bg-red-500' : 'bg-brand-500'}`} 
-                         style={{ width: `${percentage}%` }}
-                       />
-                     ) : (
-                       // If no budget, show a generic progress bar if there is spending to show activity
-                       spent > 0 && <div className="h-full bg-slate-200 w-full opacity-50" />
-                     )}
-                  </div>
-
-                  {/* Delete Action (Absolute) */}
-                  {!cat.isDefault && (
-                    <button 
-                      onClick={() => handleDeleteCategory(cat.id)}
-                      className="absolute -top-2 -right-2 bg-white border border-slate-200 shadow-sm p-1.5 rounded-full text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
-                      title="Delete Category"
+        {/* Compact Month Selector Pill */}
+        <div className="bg-gradient-to-r from-brand-600 to-brand-500 rounded-full px-4 py-3 text-white shadow-md">
+          <div className="flex items-center justify-between">
+            {dateFilter !== 'all' ? (
+              <>
+                <button
+                  onClick={onPreviousPeriod}
+                  className="p-1 hover:bg-white/20 rounded-full transition-all active:scale-95"
+                  title="Previous period"
+                >
+                  <ChevronLeft size={18} />
+                </button>
+                <div className="text-center flex-1 px-3">
+                  <div className="flex items-center justify-center gap-1">
+                    <button
+                      onClick={handlePreviousFilterType}
+                      className="p-0.5 hover:bg-white/20 rounded transition-all active:scale-95"
+                      title="Previous filter type"
                     >
-                      <Trash2 size={14} />
+                      <ChevronLeft size={12} />
                     </button>
-                  )}
-               </div>
-             );
-           })}
+                    <div className="text-xs font-bold uppercase tracking-wide opacity-90 min-w-[60px] text-center">
+                      {getFilterTypeLabel()}
+                    </div>
+                    <button
+                      onClick={handleNextFilterType}
+                      className="p-0.5 hover:bg-white/20 rounded transition-all active:scale-95"
+                      title="Next filter type"
+                    >
+                      <ChevronRight size={12} />
+                    </button>
+                  </div>
+                  <div className="font-semibold text-sm mt-1.5">{currentPeriodLabel}</div>
+                </div>
+                <button
+                  onClick={onNextPeriod}
+                  className="p-1 hover:bg-white/20 rounded-full transition-all active:scale-95"
+                  title="Next period"
+                >
+                  <ChevronRight size={18} />
+                </button>
+              </>
+            ) : (
+              <div className="text-center flex-1 px-3">
+                <div className="flex items-center justify-center gap-1">
+                  <button
+                    onClick={handlePreviousFilterType}
+                    className="p-0.5 hover:bg-white/20 rounded transition-all active:scale-95"
+                    title="Previous filter type"
+                  >
+                    <ChevronLeft size={12} />
+                  </button>
+                  <div className="text-xs font-bold uppercase tracking-wide opacity-90 min-w-[60px] text-center">
+                    {getFilterTypeLabel()}
+                  </div>
+                  <button
+                    onClick={handleNextFilterType}
+                    className="p-0.5 hover:bg-white/20 rounded transition-all active:scale-95"
+                    title="Next filter type"
+                  >
+                    <ChevronRight size={12} />
+                  </button>
+                </div>
+                <div className="font-semibold text-sm mt-1.5">All Transactions</div>
+              </div>
+            )}
+          </div>
         </div>
+
+        {/* Custom Date Range Inputs */}
+        {dateFilter === 'custom' && (
+          <div className="bg-white rounded-xl p-4 shadow-md border border-slate-100">
+            <div className="flex gap-3 text-sm">
+              <div className="flex-1">
+                <label className="text-slate-600 text-xs font-medium mb-1.5 block">From Date</label>
+                <input
+                  type="date"
+                  value={customStartDate}
+                  onChange={(e) => onCustomStartDateChange(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition-colors"
+                />
+              </div>
+              <div className="flex-1">
+                <label className="text-slate-600 text-xs font-medium mb-1.5 block">To Date</label>
+                <input
+                  type="date"
+                  value={customEndDate}
+                  onChange={(e) => onCustomEndDateChange(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition-colors"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 3-Column Grid Layout */}
+        <div className="grid grid-cols-3 gap-4">
+          {settings.categories.map(cat => {
+            const spent = categoryStats[cat.name] || 0;
+            const budget = cat.monthlyBudget || 0;
+            const percentage = budget > 0 ? Math.min(100, (spent / budget) * 100) : 0;
+            const isOverBudget = budget > 0 && spent > budget;
+
+            // Use hold gesture hook
+            const { handlers, isActiveHold } = useHoldGesture({
+              onHold: () => setHoldingCategory(cat),
+              holdDuration: 2000,
+              movementThreshold: 10
+            });
+
+            return (
+              <div
+                key={cat.id}
+                className={`bg-gradient-to-br from-white to-slate-50 rounded-xl p-3 shadow-sm flex flex-col items-center gap-2 transition-all border border-slate-100 ${
+                  isActiveHold ? 'scale-95 opacity-80' : 'hover:shadow-md'
+                }`}
+                {...handlers}
+              >
+                {/* 360° Circular Progress around Icon */}
+                <CircularProgress
+                  percentage={percentage}
+                  size={56}
+                  strokeWidth={3}
+                  color={isOverBudget ? '#ef4444' : (budget > 0 ? cat.color : '#cbd5e1')}
+                  backgroundColor="#f1f5f9"
+                >
+                  {/* Square rounded icon inside circle */}
+                  <div
+                    className="w-12 h-12 rounded-lg flex items-center justify-center text-white"
+                    style={{ backgroundColor: cat.color }}
+                  >
+                    {renderIcon(cat.icon, 20)}
+                  </div>
+                </CircularProgress>
+
+                {/* Category Name */}
+                <div className="text-xs font-bold text-slate-800 text-center truncate w-full">
+                  {cat.name}
+                </div>
+
+                {/* Spent Amount */}
+                <div className="text-[10px] text-slate-500 font-medium">
+                  {settings.baseCurrency} {spent.toFixed(2)}
+                </div>
+
+                {/* Budget Badge */}
+                {budget > 0 && (
+                  <div className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                    isOverBudget ? 'bg-red-50 text-red-600' : 'bg-brand-50 text-brand-600'
+                  }`}>
+                    {isOverBudget ? 'Over!' : `${percentage.toFixed(0)}%`}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Category Summary Modal */}
+        {holdingCategory && (
+          <CategorySummaryModal
+            category={holdingCategory}
+            transactions={transactions.filter(t => t.category === holdingCategory.name)}
+            baseCurrency={settings.baseCurrency}
+            onClose={() => setHoldingCategory(null)}
+          />
+        )}
       </div>
     </div>
   );
