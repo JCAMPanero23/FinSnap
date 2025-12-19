@@ -21,6 +21,9 @@ const AddTransaction: React.FC<AddTransactionProps> = ({ onAdd, onCancel, settin
   const [error, setError] = useState<string | null>(null);
   const [selectedImage, setSelectedImage] = useState<{data: string, mimeType: string} | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [receiptImage, setReceiptImage] = useState<string | null>(null);
+  const [keepReceipt, setKeepReceipt] = useState(false);
+  const receiptFileInputRef = useRef<HTMLInputElement>(null);
 
   // Manual Mode State
   const [manualType, setManualType] = useState<TransactionType>(TransactionType.EXPENSE);
@@ -76,7 +79,13 @@ const AddTransaction: React.FC<AddTransactionProps> = ({ onAdd, onCancel, settin
             mappedAccountId = matchedAccount?.id;
           }
 
-          uniqueResults.push({ ...r, id: uuidv4(), accountId: mappedAccountId });
+          uniqueResults.push({
+            ...r,
+            id: uuidv4(),
+            accountId: mappedAccountId,
+            receiptImage: receiptImage || undefined,
+            keepReceipt: keepReceipt || undefined
+          });
         } else {
           duplicateCount++;
         }
@@ -124,9 +133,22 @@ const AddTransaction: React.FC<AddTransactionProps> = ({ onAdd, onCancel, settin
     }
   };
 
+  const handleReceiptUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setReceiptImage(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleConfirmPreview = () => {
     if (previewData) {
       onAdd(previewData);
+      setReceiptImage(null);
+      setKeepReceipt(false);
     }
   };
 
@@ -289,29 +311,77 @@ const AddTransaction: React.FC<AddTransactionProps> = ({ onAdd, onCancel, settin
               )}
               
               <div className="flex justify-end gap-2">
-                 <button 
+                 <button
                    onClick={handlePaste}
                    className="flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 text-slate-600 text-xs font-semibold rounded-xl transition-colors shadow-sm border border-slate-100"
                    title="Paste from clipboard"
                  >
                    <Clipboard size={16} /> Paste Text
                  </button>
-                 
-                 <button 
+
+                 <button
                    onClick={() => fileInputRef.current?.click()}
                    className="flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 text-slate-600 text-xs font-semibold rounded-xl transition-colors shadow-sm border border-slate-100"
                    title="Upload Image"
                  >
                    <ImageIcon size={16} /> Upload Image
                  </button>
-                 <input 
-                    type="file" 
-                    ref={fileInputRef} 
-                    className="hidden" 
+                 <input
+                    type="file"
+                    ref={fileInputRef}
+                    className="hidden"
                     accept="image/*"
                     onChange={handleImageUpload}
                  />
               </div>
+           </div>
+
+           <div className="space-y-3 mb-6">
+             <div className="flex items-center justify-between">
+               <label className="text-sm font-medium text-gray-700">Receipt Image (Optional)</label>
+               <button
+                 type="button"
+                 onClick={() => receiptFileInputRef.current?.click()}
+                 className="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition"
+               >
+                 {receiptImage ? 'Change' : 'Upload'}
+               </button>
+             </div>
+
+             <input
+               ref={receiptFileInputRef}
+               type="file"
+               accept="image/*"
+               onChange={handleReceiptUpload}
+               className="hidden"
+             />
+
+             {receiptImage && (
+               <div className="relative">
+                 <img
+                   src={receiptImage}
+                   alt="Receipt"
+                   className="w-full h-32 object-cover rounded-lg"
+                 />
+                 <button
+                   type="button"
+                   onClick={() => setReceiptImage(null)}
+                   className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full hover:bg-red-600"
+                 >
+                   <X className="w-4 h-4" />
+                 </button>
+
+                 <label className="flex items-center gap-2 mt-2 text-sm">
+                   <input
+                     type="checkbox"
+                     checked={keepReceipt}
+                     onChange={(e) => setKeepReceipt(e.target.checked)}
+                     className="rounded"
+                   />
+                   <span className="text-gray-700">Keep receipt (prevent auto-deletion)</span>
+                 </label>
+               </div>
+             )}
            </div>
 
            {error && (
