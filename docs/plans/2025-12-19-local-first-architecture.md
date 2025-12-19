@@ -18,7 +18,7 @@
 **Step 1: Install required packages**
 
 ```bash
-npm install idb @capacitor/biometric-auth jszip papaparse
+npm install idb capacitor-native-biometric jszip papaparse
 npm install --save-dev @types/papaparse
 ```
 
@@ -27,10 +27,12 @@ Expected: Dependencies added to package.json
 **Step 2: Verify installation**
 
 ```bash
-npm list idb @capacitor/biometric-auth jszip papaparse
+npm list idb capacitor-native-biometric jszip papaparse
 ```
 
 Expected: All 4 packages listed with versions
+
+**Note:** Using `capacitor-native-biometric` instead of `@capacitor/biometric-auth`. The Capacitor version (^6.1.3) may have compatibility issues with this plugin - will test thoroughly during Task 3 biometric implementation.
 
 **Step 3: Commit**
 
@@ -39,7 +41,7 @@ git add package.json package-lock.json
 git commit -m "chore: add dependencies for local-first architecture
 
 - idb: IndexedDB wrapper
-- @capacitor/biometric-auth: Native biometric unlock
+- capacitor-native-biometric: Native biometric unlock
 - jszip: CSV backup compression
 - papaparse: CSV parsing/generation
 
