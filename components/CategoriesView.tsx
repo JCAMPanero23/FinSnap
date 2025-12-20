@@ -226,7 +226,7 @@ const CategoriesView: React.FC<CategoriesViewProps> = ({
             return (
               <div
                 key={cat.id}
-                className={`bg-gradient-to-br from-white to-slate-50 rounded-xl p-3 shadow-sm flex flex-col items-center gap-2 transition-all border border-slate-100 ${
+                className={`rounded-xl p-3 flex flex-col items-center gap-2 transition-all ${
                   isActiveHold ? 'scale-95 opacity-80' : 'hover:shadow-md'
                 }`}
                 {...handlers}
@@ -239,9 +239,9 @@ const CategoriesView: React.FC<CategoriesViewProps> = ({
                   color={isOverBudget ? '#ef4444' : (budget > 0 ? cat.color : '#cbd5e1')}
                   backgroundColor="#f1f5f9"
                 >
-                  {/* Square rounded icon inside circle */}
+                  {/* Circular icon inside circle */}
                   <div
-                    className="w-12 h-12 rounded-lg flex items-center justify-center text-white"
+                    className="w-12 h-12 rounded-full flex items-center justify-center text-white"
                     style={{ backgroundColor: cat.color }}
                   >
                     {renderIcon(cat.icon, 20)}
@@ -249,7 +249,7 @@ const CategoriesView: React.FC<CategoriesViewProps> = ({
                 </CircularProgress>
 
                 {/* Category Name */}
-                <div className="text-xs font-bold text-slate-800 text-center truncate w-full">
+                <div className="text-xs font-bold text-slate-800 text-center line-clamp-2 w-full px-1 leading-tight min-h-[2rem]">
                   {cat.name}
                 </div>
 
