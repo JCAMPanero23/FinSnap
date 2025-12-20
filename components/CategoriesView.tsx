@@ -7,6 +7,7 @@ import {
   BookOpen, GraduationCap, Baby, Dog, Wrench, Wifi, Fuel, Calendar, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { useHoldGesture } from '../hooks/useHoldGesture';
+import { useDoubleTapGesture } from '../hooks/useDoubleTapGesture';
 import CircularProgress from './CircularProgress';
 import CategorySummaryModal from './CategorySummaryModal';
 
@@ -56,8 +57,7 @@ const CategoriesView: React.FC<CategoriesViewProps> = ({
   onNextPeriod,
   currentPeriodLabel
 }) => {
-  // Hold Gesture State for modal
-  const [holdingCategory, setHoldingCategory] = useState<Category | null>(null);
+  const [analyticsCategory, setAnalyticsCategory] = useState<Category | null>(null);
 
   // Date Filter Type Navigation
   const handlePreviousFilterType = () => {
@@ -217,11 +217,31 @@ const CategoriesView: React.FC<CategoriesViewProps> = ({
             const isOverBudget = budget > 0 && spent > budget;
 
             // Use hold gesture hook
-            const { handlers, isActiveHold } = useHoldGesture({
-              onHold: () => setHoldingCategory(cat),
-              holdDuration: 2000,
+            const { handlers: holdHandlers, isActiveHold } = useHoldGesture({
+              onHold: () => {
+                // TODO: Will trigger global edit mode in next task
+                console.log('Hold detected - edit mode coming soon');
+              },
+              holdDuration: 3000, // Changed from 2000
               movementThreshold: 10
             });
+
+            const { handlers: doubleTapHandlers } = useDoubleTapGesture({
+              onDoubleTap: () => setAnalyticsCategory(cat),
+            });
+
+            // Merge handlers
+            const combinedHandlers = {
+              ...holdHandlers,
+              onClick: (e: React.MouseEvent) => {
+                holdHandlers.onMouseDown?.(e);
+                doubleTapHandlers.onClick?.(e);
+              },
+              onTouchEnd: (e: React.TouchEvent) => {
+                holdHandlers.onTouchEnd?.(e);
+                doubleTapHandlers.onTouchEnd?.(e);
+              },
+            };
 
             return (
               <div
@@ -229,7 +249,11 @@ const CategoriesView: React.FC<CategoriesViewProps> = ({
                 className={`rounded-xl p-3 flex flex-col items-center gap-2 transition-all ${
                   isActiveHold ? 'scale-95 opacity-80' : 'hover:shadow-md'
                 }`}
-                {...handlers}
+                {...combinedHandlers}
+                onMouseMove={holdHandlers.onMouseMove}
+                onMouseUp={holdHandlers.onMouseUp}
+                onTouchStart={holdHandlers.onTouchStart}
+                onTouchMove={holdHandlers.onTouchMove}
               >
                 {/* 360° Circular Progress around Icon */}
                 <CircularProgress
@@ -270,13 +294,13 @@ const CategoriesView: React.FC<CategoriesViewProps> = ({
           })}
         </div>
 
-        {/* Category Summary Modal */}
-        {holdingCategory && (
+        {/* Category Summary Modal - triggered by double-tap */}
+        {analyticsCategory && (
           <CategorySummaryModal
-            category={holdingCategory}
-            transactions={transactions.filter(t => t.category === holdingCategory.name)}
+            category={analyticsCategory}
+            transactions={transactions.filter(t => t.category === analyticsCategory.name)}
             baseCurrency={settings.baseCurrency}
-            onClose={() => setHoldingCategory(null)}
+            onClose={() => setAnalyticsCategory(null)}
           />
         )}
       </div>
