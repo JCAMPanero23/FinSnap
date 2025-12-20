@@ -235,7 +235,6 @@ const CategoriesView: React.FC<CategoriesViewProps> = ({
                 <CircularProgress
                   percentage={percentage}
                   size={56}
-                  strokeWidth={3}
                   color={isOverBudget ? '#ef4444' : (budget > 0 ? cat.color : '#cbd5e1')}
                   backgroundColor="#f1f5f9"
                 >
