@@ -27,7 +27,7 @@ const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({ onClose, onRest
   const session = supabase.auth.getSession();
 
   useEffect(() => {
-    if (mode === 'restore') {
+    if (mode === 'restore' || mode === 'backup') {
       loadBackups();
     }
   }, [mode]);
@@ -165,6 +165,16 @@ const BackupRestoreModal: React.FC<BackupRestoreModalProps> = ({ onClose, onRest
               <p className="text-gray-700">
                 This will export all your data (transactions, accounts, categories, receipts) to Supabase Storage.
               </p>
+              {backups.length > 0 && (
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-sm text-blue-800">
+                    <span className="font-semibold">{backups.length}/5 backups used.</span>
+                    {backups.length >= 5 && (
+                      <span className="block mt-1">Oldest backup will be automatically deleted.</span>
+                    )}
+                  </p>
+                </div>
+              )}
               <button
                 onClick={handleBackup}
                 disabled={loading}

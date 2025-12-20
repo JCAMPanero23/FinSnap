@@ -131,7 +131,19 @@ export async function exportReceiptsZip(): Promise<Blob> {
   return blob;
 }
 
+const MAX_BACKUPS_PER_USER = 5;
+
 export async function uploadBackup(userId: string, csv: string, receiptsBlob: Blob): Promise<void> {
+  // Check existing backups and enforce limit
+  const existingBackups = await listBackups(userId);
+
+  if (existingBackups.length >= MAX_BACKUPS_PER_USER) {
+    // Delete the oldest backup (first in the sorted list)
+    const oldestBackup = existingBackups[existingBackups.length - 1]; // listBackups sorts desc, so last is oldest
+    console.log(`Deleting oldest backup: ${oldestBackup.path}`);
+    await deleteBackup(oldestBackup.path);
+  }
+
   const timestamp = Date.now();
   const folderPath = `backups/${userId}/${timestamp}`;
 
@@ -213,6 +225,27 @@ export async function downloadBackup(backupPath: string): Promise<{ csv: string;
   }
 
   return { csv, receiptsBlob: zipData };
+}
+
+export async function deleteBackup(backupPath: string): Promise<void> {
+  // Delete both files in the backup folder
+  const { error: csvError } = await supabase.storage
+    .from('backups')
+    .remove([`${backupPath}/data.csv`]);
+
+  if (csvError) {
+    console.error(`Failed to delete CSV: ${csvError.message}`);
+  }
+
+  const { error: zipError } = await supabase.storage
+    .from('backups')
+    .remove([`${backupPath}/receipts.zip`]);
+
+  if (zipError) {
+    console.error(`Failed to delete receipts: ${zipError.message}`);
+  }
+
+  console.log(`Deleted backup: ${backupPath}`);
 }
 
 export async function restoreFromBackup(csv: string, receiptsBlob: Blob): Promise<void> {
