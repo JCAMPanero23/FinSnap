@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Transaction, TransactionType, Category, Account } from '../types';
-import { X, Save, Trash2, RefreshCw, BookmarkPlus } from 'lucide-react';
+import { X, Save, Trash2, RefreshCw, BookmarkPlus, Loader2 } from 'lucide-react';
+import { parseReceiptLineItems, ReceiptLineItem } from '../services/receiptSplitService';
+import SplitEditorModal, { ItemGroup } from './SplitEditorModal';
+import { v4 as uuidv4 } from 'uuid';
 
 interface EditTransactionModalProps {
   transaction: Transaction;
@@ -31,6 +34,11 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
   const [receiptImage, setReceiptImage] = useState<string | undefined>(transaction?.receiptImage);
   const [keepReceipt, setKeepReceipt] = useState<boolean>(transaction?.keepReceipt || false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Split transaction state
+  const [showSplitEditor, setShowSplitEditor] = useState(false);
+  const [splitLineItems, setSplitLineItems] = useState<ReceiptLineItem[] | null>(null);
+  const [isSplitLoading, setIsSplitLoading] = useState(false);
 
   const handleReceiptUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -119,6 +127,74 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
       onAddRule(formData.merchant, formData.category, formData.type);
       alert(`Added parsing rule for "${formData.merchant}"`);
     }
+  };
+
+  const handleSplitTransaction = async () => {
+    if (!receiptImage) {
+      alert('Please upload a receipt image first');
+      return;
+    }
+
+    setIsSplitLoading(true);
+
+    try {
+      const [mimeType, base64Data] = receiptImage.split(',');
+      const cleanMimeType = mimeType.match(/:(.*?);/)?.[1] || 'image/jpeg';
+
+      // Create a minimal AppSettings object from available data
+      const settings = {
+        baseCurrency: formData.currency,
+        categories: categories,
+        accounts: accounts,
+        recurringRules: [],
+        savingsGoals: [],
+        warranties: [],
+      };
+
+      const result = await parseReceiptLineItems(
+        base64Data,
+        cleanMimeType,
+        settings
+      );
+
+      setSplitLineItems(result.lineItems);
+      setShowSplitEditor(true);
+    } catch (error) {
+      console.error('Split parse error:', error);
+      alert('Failed to parse receipt. Please try again.');
+    } finally {
+      setIsSplitLoading(false);
+    }
+  };
+
+  const handleConfirmSplit = (groups: ItemGroup[]) => {
+    const groupId = uuidv4();
+    const splitTransactions: Transaction[] = [];
+
+    groups.forEach((group) => {
+      const groupAmount = group.items.reduce((sum, item) => sum + item.amount, 0);
+      const groupDescription = group.items.map((i) => i.description).join(', ');
+
+      splitTransactions.push({
+        ...formData,
+        id: uuidv4(),
+        groupId,
+        amount: groupAmount,
+        merchant: `${formData.merchant} - ${groupDescription}`,
+        category: group.category,
+        receiptImage: receiptImage,
+      });
+    });
+
+    // Delete original transaction
+    onDelete(transaction.id);
+
+    // Save each split transaction
+    splitTransactions.forEach((tx) => {
+      onSave(tx);
+    });
+
+    onClose();
   };
 
   return (
@@ -338,14 +414,31 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
           </div>
 
           <div className="pt-4 flex gap-3">
-            <button 
+            <button
               type="button"
               onClick={() => { onDelete(transaction.id); onClose(); }}
               className="p-4 rounded-xl font-semibold text-red-500 bg-red-50 hover:bg-red-100 transition-colors"
             >
               <Trash2 size={20} />
             </button>
-            <button 
+            <button
+              type="button"
+              onClick={handleSplitTransaction}
+              disabled={isSplitLoading || !receiptImage}
+              className="px-4 py-3 rounded-xl font-semibold text-brand-600 bg-brand-50 hover:bg-brand-100 transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSplitLoading ? (
+                <>
+                  <Loader2 className="animate-spin" size={18} />
+                  Analyzing...
+                </>
+              ) : (
+                <>
+                  📄 Split
+                </>
+              )}
+            </button>
+            <button
               type="submit"
               className="flex-1 p-4 rounded-xl font-bold text-white bg-brand-600 shadow-lg shadow-brand-500/20 hover:bg-brand-700 transition-colors flex items-center justify-center gap-2"
             >
@@ -354,6 +447,31 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
           </div>
         </form>
       </div>
+
+      {/* Split Editor Modal */}
+      {showSplitEditor && splitLineItems && (
+        <SplitEditorModal
+          originalAmount={formData.amount}
+          merchant={formData.merchant}
+          date={formData.date}
+          accountId={formData.accountId}
+          lineItems={splitLineItems}
+          settings={{
+            baseCurrency: formData.currency,
+            categories: categories,
+            accounts: accounts,
+            recurringRules: [],
+            savingsGoals: [],
+            warranties: [],
+          }}
+          baseCurrency={formData.currency}
+          onConfirm={handleConfirmSplit}
+          onCancel={() => {
+            setShowSplitEditor(false);
+            setSplitLineItems(null);
+          }}
+        />
+      )}
     </div>
   );
 };
