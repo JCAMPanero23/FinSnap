@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Transaction, TransactionType, Account } from '../types';
 import { Search, TrendingDown, TrendingUp, Filter, Pencil, CreditCard, Clock, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import SplitTransactionsModal from './SplitTransactionsModal';
 
 interface TransactionListProps {
   transactions: Transaction[];
@@ -42,6 +43,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<'ALL' | 'INCOME' | 'CASH' | 'CREDIT'>('ALL');
+  const [viewingSplitGroup, setViewingSplitGroup] = useState<string | null>(null);
 
   // Date Filter Type Navigation
   const handlePreviousFilterType = () => {
@@ -292,7 +294,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
                           <div className="font-semibold text-slate-800 truncate" title={t.merchant}>{t.merchant}</div>
                           <div className="text-xs text-slate-500 flex items-center gap-2 flex-wrap">
                             <span className="truncate">{t.category}</span>
-                            
+
                             {t.time && (
                               <span className="flex items-center gap-0.5 text-slate-400 whitespace-nowrap">
                                 <Clock size={10} /> {t.time}
@@ -304,6 +306,18 @@ const TransactionList: React.FC<TransactionListProps> = ({
                                 <CreditCard size={10} className="text-slate-400 shrink-0" />
                                 <span className="font-medium text-[10px] text-slate-600 truncate">{accountDisplay}</span>
                               </div>
+                            )}
+
+                            {t.groupId && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setViewingSplitGroup(t.groupId);
+                                }}
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-brand-50 text-brand-600 rounded text-[10px] font-medium hover:bg-brand-100 transition-colors"
+                              >
+                                🔗 Split ({transactions.filter(tx => tx.groupId === t.groupId).length})
+                              </button>
                             )}
                           </div>
                         </div>
@@ -331,6 +345,15 @@ const TransactionList: React.FC<TransactionListProps> = ({
           ))
         )}
       </div>
+
+      {/* Split Transactions Modal */}
+      {viewingSplitGroup && (
+        <SplitTransactionsModal
+          transactions={transactions.filter(t => t.groupId === viewingSplitGroup)}
+          baseCurrency={transactions.find(t => t.groupId === viewingSplitGroup)?.currency || 'USD'}
+          onClose={() => setViewingSplitGroup(null)}
+        />
+      )}
     </div>
   );
 };
