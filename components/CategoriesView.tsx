@@ -4,11 +4,30 @@ import {
   Tag, ShoppingBag, Utensils, Car, Zap, Film, Heart,
   Briefcase, ArrowRightLeft, MoreHorizontal, Home,
   Smartphone, Plane, Coffee, Gift, Music, Gamepad2,
-  BookOpen, GraduationCap, Baby, Dog, Wrench, Wifi, Fuel, Calendar, ChevronLeft, ChevronRight
+  BookOpen, GraduationCap, Baby, Dog, Wrench, Wifi, Fuel, Calendar, ChevronLeft, ChevronRight, Plus, X
 } from 'lucide-react';
 import { useHoldGesture } from '../hooks/useHoldGesture';
+import { useDoubleTapGesture } from '../hooks/useDoubleTapGesture';
 import CircularProgress from './CircularProgress';
 import CategorySummaryModal from './CategorySummaryModal';
+import CategoryEditModal from './CategoryEditModal';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  rectSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 interface CategoriesViewProps {
   settings: AppSettings;
@@ -42,6 +61,146 @@ const ICON_LIB: Record<string, any> = {
   BookOpen, GraduationCap, Baby, Dog, Wrench, Wifi, Fuel, Tag
 };
 
+interface SortableCategoryItemProps {
+  cat: Category;
+  spent: number;
+  budget: number;
+  percentage: number;
+  isOverBudget: boolean;
+  baseCurrency: string;
+  isEditMode: boolean;
+  onEdit: (cat: Category) => void;
+  onDelete: (id: string) => void;
+  onAnalytics: (cat: Category) => void;
+  renderIcon: (iconName: string | undefined, size: number) => JSX.Element;
+  onHold: () => void;
+}
+
+const SortableCategoryItem: React.FC<SortableCategoryItemProps> = ({
+  cat,
+  spent,
+  budget,
+  percentage,
+  isOverBudget,
+  baseCurrency,
+  isEditMode,
+  onEdit,
+  onDelete,
+  onAnalytics,
+  renderIcon,
+  onHold,
+}) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: cat.id, disabled: !isEditMode });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  const { handlers: holdHandlers, isActiveHold } = useHoldGesture({
+    onHold,
+    holdDuration: 3000,
+    movementThreshold: 10
+  });
+
+  const { handlers: doubleTapHandlers } = useDoubleTapGesture({
+    onDoubleTap: () => !isEditMode && onAnalytics(cat),
+  });
+
+  const combinedHandlers = {
+    ...holdHandlers,
+    onClick: (e: React.MouseEvent) => {
+      if (isEditMode) {
+        onEdit(cat);
+        return;
+      }
+      holdHandlers.onMouseDown?.(e);
+      doubleTapHandlers.onClick?.(e);
+    },
+    onTouchEnd: (e: React.TouchEvent) => {
+      if (isEditMode) return;
+      holdHandlers.onTouchEnd?.(e);
+      doubleTapHandlers.onTouchEnd?.(e);
+    },
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...(isEditMode ? listeners : {})}
+      className={`rounded-xl p-3 flex flex-col items-center gap-2 transition-all relative ${
+        isActiveHold ? 'scale-95 opacity-80' : 'hover:shadow-md'
+      } ${isEditMode ? 'animate-wiggle' : ''} ${
+        isDragging ? 'shadow-2xl scale-110 z-50 opacity-50' : ''
+      }`}
+      {...combinedHandlers}
+      onMouseMove={holdHandlers.onMouseMove}
+      onMouseUp={holdHandlers.onMouseUp}
+      onTouchStart={holdHandlers.onTouchStart}
+      onTouchMove={holdHandlers.onTouchMove}
+    >
+      {/* Delete Badge in Edit Mode */}
+      {isEditMode && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            if (window.confirm(`Delete category "${cat.name}"?`)) {
+              onDelete(cat.id);
+            }
+          }}
+          className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors z-10 shadow-md"
+        >
+          <X size={14} />
+        </button>
+      )}
+
+      {/* Circular Progress with Icon */}
+      <CircularProgress
+        percentage={percentage}
+        size={56}
+        strokeWidth={4}
+        color={isOverBudget ? '#ef4444' : (budget > 0 ? cat.color : '#cbd5e1')}
+        backgroundColor="#f1f5f9"
+      >
+        <div
+          className="w-12 h-12 rounded-full flex items-center justify-center text-white"
+          style={{ backgroundColor: cat.color }}
+        >
+          {renderIcon(cat.icon, 20)}
+        </div>
+      </CircularProgress>
+
+      {/* Category Name */}
+      <div className="text-xs font-bold text-slate-800 text-center line-clamp-2 w-full px-1 leading-tight min-h-[2rem]">
+        {cat.name}
+      </div>
+
+      {/* Spent Amount */}
+      <div className="text-[10px] text-slate-500 font-medium">
+        {baseCurrency} {spent.toFixed(2)}
+      </div>
+
+      {/* Budget Badge */}
+      {budget > 0 && (
+        <div className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
+          isOverBudget ? 'bg-red-50 text-red-600' : 'bg-brand-50 text-brand-600'
+        }`}>
+          {isOverBudget ? 'Over!' : `${percentage.toFixed(0)}%`}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const CategoriesView: React.FC<CategoriesViewProps> = ({
   settings,
   transactions,
@@ -56,8 +215,17 @@ const CategoriesView: React.FC<CategoriesViewProps> = ({
   onNextPeriod,
   currentPeriodLabel
 }) => {
-  // Hold Gesture State for modal
-  const [holdingCategory, setHoldingCategory] = useState<Category | null>(null);
+  const [analyticsCategory, setAnalyticsCategory] = useState<Category | null>(null);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+  const [isCreatingCategory, setIsCreatingCategory] = useState(false);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   // Date Filter Type Navigation
   const handlePreviousFilterType = () => {
@@ -100,6 +268,43 @@ const CategoriesView: React.FC<CategoriesViewProps> = ({
   const renderIcon = (iconName: string | undefined, size: number = 18) => {
      const IconComp = ICON_LIB[iconName || 'Tag'] || Tag;
      return <IconComp size={size} />;
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      const oldIndex = settings.categories.findIndex((cat) => cat.id === active.id);
+      const newIndex = settings.categories.findIndex((cat) => cat.id === over.id);
+
+      const reorderedCategories = arrayMove(settings.categories, oldIndex, newIndex);
+      onUpdateSettings({ ...settings, categories: reorderedCategories });
+    }
+  };
+
+  const handleSaveCategory = (categoryData: Partial<Category>) => {
+    if (categoryData.id) {
+      // Edit existing
+      const updated = settings.categories.map(c =>
+        c.id === categoryData.id ? { ...c, ...categoryData } : c
+      );
+      onUpdateSettings({ ...settings, categories: updated });
+    } else {
+      // Create new
+      const newCat: Category = {
+        id: Date.now().toString(),
+        name: categoryData.name!,
+        icon: categoryData.icon,
+        color: categoryData.color!,
+        monthlyBudget: categoryData.monthlyBudget,
+      };
+      onUpdateSettings({ ...settings, categories: [...settings.categories, newCat] });
+    }
+  };
+
+  const handleDeleteCategory = (categoryId: string) => {
+    const updated = settings.categories.filter(c => c.id !== categoryId);
+    onUpdateSettings({ ...settings, categories: updated });
   };
 
   return (
@@ -208,76 +413,97 @@ const CategoriesView: React.FC<CategoriesViewProps> = ({
           </div>
         )}
 
-        {/* 3-Column Grid Layout */}
-        <div className="grid grid-cols-3 gap-4">
-          {settings.categories.map(cat => {
-            const spent = categoryStats[cat.name] || 0;
-            const budget = cat.monthlyBudget || 0;
-            const percentage = budget > 0 ? Math.min(100, (spent / budget) * 100) : 0;
-            const isOverBudget = budget > 0 && spent > budget;
+        {/* 3-Column Grid Layout with Drag & Drop */}
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={settings.categories.map(cat => cat.id)}
+            strategy={rectSortingStrategy}
+          >
+            <div className="grid grid-cols-3 gap-4">
+              {settings.categories.map(cat => {
+                const spent = categoryStats[cat.name] || 0;
+                const budget = cat.monthlyBudget || 0;
+                const percentage = budget > 0 ? Math.min(100, (spent / budget) * 100) : 0;
+                const isOverBudget = budget > 0 && spent > budget;
 
-            // Use hold gesture hook
-            const { handlers, isActiveHold } = useHoldGesture({
-              onHold: () => setHoldingCategory(cat),
-              holdDuration: 2000,
-              movementThreshold: 10
-            });
+                return (
+                  <SortableCategoryItem
+                    key={cat.id}
+                    cat={cat}
+                    spent={spent}
+                    budget={budget}
+                    percentage={percentage}
+                    isOverBudget={isOverBudget}
+                    baseCurrency={settings.baseCurrency}
+                    isEditMode={isEditMode}
+                    onEdit={setEditingCategory}
+                    onDelete={handleDeleteCategory}
+                    onAnalytics={setAnalyticsCategory}
+                    renderIcon={renderIcon}
+                    onHold={() => setIsEditMode(true)}
+                  />
+                );
+              })}
 
-            return (
-              <div
-                key={cat.id}
-                className={`bg-gradient-to-br from-white to-slate-50 rounded-xl p-3 shadow-sm flex flex-col items-center gap-2 transition-all border border-slate-100 ${
-                  isActiveHold ? 'scale-95 opacity-80' : 'hover:shadow-md'
-                }`}
-                {...handlers}
-              >
-                {/* 360° Circular Progress around Icon */}
-                <CircularProgress
-                  percentage={percentage}
-                  size={56}
-                  strokeWidth={3}
-                  color={isOverBudget ? '#ef4444' : (budget > 0 ? cat.color : '#cbd5e1')}
-                  backgroundColor="#f1f5f9"
+              {/* Add Category Card (in edit mode) */}
+              {isEditMode && (
+                <button
+                  onClick={() => setIsCreatingCategory(true)}
+                  className="rounded-xl p-3 flex flex-col items-center justify-center gap-2 border-2 border-dashed border-slate-300 hover:border-brand-500 hover:bg-brand-50 transition-all min-h-[140px]"
                 >
-                  {/* Square rounded icon inside circle */}
-                  <div
-                    className="w-12 h-12 rounded-lg flex items-center justify-center text-white"
-                    style={{ backgroundColor: cat.color }}
-                  >
-                    {renderIcon(cat.icon, 20)}
+                  <div className="w-12 h-12 rounded-full bg-brand-500 text-white flex items-center justify-center">
+                    <Plus size={24} />
                   </div>
-                </CircularProgress>
+                  <div className="text-xs font-bold text-slate-600">Add Category</div>
+                </button>
+              )}
+            </div>
+          </SortableContext>
+        </DndContext>
 
-                {/* Category Name */}
-                <div className="text-xs font-bold text-slate-800 text-center truncate w-full">
-                  {cat.name}
-                </div>
+        {/* Done Button (in edit mode) */}
+        {isEditMode && (
+          <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-20">
+            <button
+              onClick={() => setIsEditMode(false)}
+              className="px-8 py-3 bg-brand-600 text-white rounded-full shadow-lg hover:bg-brand-700 transition-colors font-bold"
+            >
+              Done
+            </button>
+          </div>
+        )}
 
-                {/* Spent Amount */}
-                <div className="text-[10px] text-slate-500 font-medium">
-                  {settings.baseCurrency} {spent.toFixed(2)}
-                </div>
-
-                {/* Budget Badge */}
-                {budget > 0 && (
-                  <div className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
-                    isOverBudget ? 'bg-red-50 text-red-600' : 'bg-brand-50 text-brand-600'
-                  }`}>
-                    {isOverBudget ? 'Over!' : `${percentage.toFixed(0)}%`}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Category Summary Modal */}
-        {holdingCategory && (
+        {/* Category Summary Modal - triggered by double-tap */}
+        {analyticsCategory && (
           <CategorySummaryModal
-            category={holdingCategory}
-            transactions={transactions.filter(t => t.category === holdingCategory.name)}
+            category={analyticsCategory}
+            transactions={transactions.filter(t => t.category === analyticsCategory.name)}
             baseCurrency={settings.baseCurrency}
-            onClose={() => setHoldingCategory(null)}
+            onClose={() => setAnalyticsCategory(null)}
+          />
+        )}
+
+        {/* Category Edit Modals */}
+        {editingCategory && (
+          <CategoryEditModal
+            category={editingCategory}
+            baseCurrency={settings.baseCurrency}
+            onSave={handleSaveCategory}
+            onDelete={() => handleDeleteCategory(editingCategory.id)}
+            onClose={() => setEditingCategory(null)}
+          />
+        )}
+
+        {isCreatingCategory && (
+          <CategoryEditModal
+            category={null}
+            baseCurrency={settings.baseCurrency}
+            onSave={handleSaveCategory}
+            onClose={() => setIsCreatingCategory(false)}
           />
         )}
       </div>

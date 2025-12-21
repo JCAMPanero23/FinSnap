@@ -23,6 +23,15 @@
             fontFamily: {
               sans: ['Inter', 'system-ui', 'sans-serif'],
             },
+            animation: {
+              'wiggle': 'wiggle 0.3s ease-in-out infinite',
+            },
+            keyframes: {
+              wiggle: {
+                '0%, 100%': { transform: 'rotate(-1deg)' },
+                '50%': { transform: 'rotate(1deg)' },
+              },
+            },
           },
         },
       }

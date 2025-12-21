@@ -12,7 +12,7 @@ interface CircularProgressProps {
 const CircularProgress: React.FC<CircularProgressProps> = ({
   percentage,
   size = 56,
-  strokeWidth = 3,
+  strokeWidth = 4,
   color,
   backgroundColor = '#f1f5f9',
   children,

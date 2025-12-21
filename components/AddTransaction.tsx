@@ -3,6 +3,8 @@ import { parseTransactions } from '../services/geminiService';
 import { Transaction, TransactionType, AppSettings } from '../types';
 import { Sparkles, ArrowRight, X, Check, Loader2, MessageSquareText, Clipboard, Info, Image as ImageIcon, Banknote, BrainCircuit, Calendar } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
+import { parseReceiptLineItems, ReceiptLineItem } from '../services/receiptSplitService';
+import SplitEditorModal, { ItemGroup } from './SplitEditorModal';
 
 interface AddTransactionProps {
   onAdd: (transactions: Transaction[]) => void;
@@ -24,6 +26,11 @@ const AddTransaction: React.FC<AddTransactionProps> = ({ onAdd, onCancel, settin
   const [receiptImage, setReceiptImage] = useState<string | null>(null);
   const [keepReceipt, setKeepReceipt] = useState(false);
   const receiptFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Split State
+  const [splittingTransaction, setSplittingTransaction] = useState<Transaction | null>(null);
+  const [splitLineItems, setSplitLineItems] = useState<ReceiptLineItem[] | null>(null);
+  const [isSplitLoading, setIsSplitLoading] = useState(false);
 
   // Manual Mode State
   const [manualType, setManualType] = useState<TransactionType>(TransactionType.EXPENSE);
@@ -163,7 +170,7 @@ const AddTransaction: React.FC<AddTransactionProps> = ({ onAdd, onCancel, settin
     if (!manualAmount) return;
 
     const accName = settings.accounts.find(a => a.id === manualAccount)?.name || 'Cash';
-    
+
     const newTxn: Transaction = {
       id: uuidv4(),
       amount: parseFloat(manualAmount),
@@ -184,6 +191,69 @@ const AddTransaction: React.FC<AddTransactionProps> = ({ onAdd, onCancel, settin
     }
 
     onAdd([newTxn]);
+  };
+
+  // --- SPLIT HANDLERS ---
+  const handleSplitTransaction = async (transaction: Transaction) => {
+    // Check if receipt image exists
+    if (!transaction.receiptImage && !receiptImage) {
+      alert('Please upload a receipt image first');
+      return;
+    }
+
+    setSplittingTransaction(transaction);
+    setIsSplitLoading(true);
+
+    try {
+      const imageToUse = transaction.receiptImage || receiptImage;
+      const [mimeType, base64Data] = imageToUse!.split(',');
+      const cleanMimeType = mimeType.match(/:(.*?);/)?.[1] || 'image/jpeg';
+
+      const result = await parseReceiptLineItems(
+        base64Data,
+        cleanMimeType,
+        settings
+      );
+
+      setSplitLineItems(result.lineItems);
+    } catch (error) {
+      console.error('Split parse error:', error);
+      alert('Failed to parse receipt. Please try again.');
+      setSplittingTransaction(null);
+    } finally {
+      setIsSplitLoading(false);
+    }
+  };
+
+  const handleConfirmSplit = (groups: ItemGroup[]) => {
+    if (!splittingTransaction) return;
+
+    const groupId = uuidv4();
+    const splitTransactions: Transaction[] = [];
+
+    groups.forEach((group) => {
+      const groupAmount = group.items.reduce((sum, item) => sum + item.amount, 0);
+      const groupDescription = group.items.map((i) => i.description).join(', ');
+
+      splitTransactions.push({
+        ...splittingTransaction,
+        id: uuidv4(),
+        groupId,
+        amount: groupAmount,
+        merchant: `${splittingTransaction.merchant} - ${groupDescription}`,
+        category: group.category,
+        receiptImage: splittingTransaction.receiptImage || receiptImage,
+      });
+    });
+
+    // Replace original transaction with split transactions in preview
+    if (previewData) {
+      const updated = previewData.filter((t) => t.id !== splittingTransaction.id);
+      setPreviewData([...updated, ...splitTransactions]);
+    }
+
+    setSplittingTransaction(null);
+    setSplitLineItems(null);
   };
 
   if (previewData) {
@@ -232,6 +302,24 @@ const AddTransaction: React.FC<AddTransactionProps> = ({ onAdd, onCancel, settin
                 )}
                 {t.rawText && <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-500 truncate max-w-[250px]">Src: "{t.rawText}"</span>}
               </div>
+
+              {/* Split with Receipt Button */}
+              <button
+                onClick={() => handleSplitTransaction(t)}
+                disabled={isSplitLoading && splittingTransaction?.id === t.id}
+                className="mt-3 w-full py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-2"
+              >
+                {isSplitLoading && splittingTransaction?.id === t.id ? (
+                  <>
+                    <Loader2 className="animate-spin" size={14} />
+                    Analyzing Receipt...
+                  </>
+                ) : (
+                  <>
+                    📄 Split with Receipt
+                  </>
+                )}
+              </button>
             </div>
           ))}
         </div>
@@ -516,6 +604,23 @@ const AddTransaction: React.FC<AddTransactionProps> = ({ onAdd, onCancel, settin
         </div>
       )}
 
+      {/* Split Editor Modal */}
+      {splittingTransaction && splitLineItems && (
+        <SplitEditorModal
+          originalAmount={splittingTransaction.amount}
+          merchant={splittingTransaction.merchant}
+          date={splittingTransaction.date}
+          accountId={splittingTransaction.accountId}
+          lineItems={splitLineItems}
+          settings={settings}
+          baseCurrency={settings.baseCurrency}
+          onConfirm={handleConfirmSplit}
+          onCancel={() => {
+            setSplittingTransaction(null);
+            setSplitLineItems(null);
+          }}
+        />
+      )}
     </div>
   );
 };

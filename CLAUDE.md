@@ -296,6 +296,57 @@ Comprehensive developer tools for testing and data management:
 
 **Security**: All reset functions require explicit confirmation dialogs to prevent accidental data loss.
 
+## Category Management
+
+### Gesture Controls
+- **Double-Tap**: Opens CategorySummaryModal (analytics, read-only)
+- **3-Second Hold**: Enters global edit mode
+  - Drag & drop to reorder categories
+  - Tap category to edit (name, icon, color, budget)
+  - Delete badge (X) to remove category
+  - "Add Category" card to create new
+  - "Done" button to exit edit mode
+
+### UI Enhancements
+- Circular category icons (not square)
+- 360° budget progress rings around icons
+- No white card backgrounds (cleaner design)
+- 2-line category names with line-clamp
+
+## AI Receipt Splitting
+
+### Feature
+Split single receipts into multiple transactions grouped by category.
+
+### Usage
+1. **In Review Mode**: Tap "Split with Receipt" on any parsed transaction
+2. **In Edit Mode**: Tap "Split" button in EditTransactionModal
+
+### Flow
+- AI parses receipt image into line items
+- Auto-groups by category (e.g., Groceries, Entertainment)
+- User can:
+  - Edit item descriptions and amounts
+  - Drag items between groups
+  - Change group categories
+  - Add new groups or items
+  - Remove items
+- Creates multiple transactions with shared `groupId`
+- All splits share the same receipt image
+
+### Split Transaction Display
+- Badge: "🔗 Split (X)" shows linked count
+- Tap badge to view all transactions in group
+- SplitTransactionsModal shows individual + total amounts
+
+## Implementation Files
+- `hooks/useDoubleTapGesture.ts` - Double-tap detection
+- `hooks/useHoldGesture.ts` - 3-second hold for edit mode
+- `components/CategoryEditModal.tsx` - Create/edit categories
+- `services/receiptSplitService.ts` - AI receipt line item parsing
+- `components/SplitEditorModal.tsx` - Grouping and editing line items
+- `components/SplitTransactionsModal.tsx` - View linked split transactions
+
 ## Utilities
 
 - `start-dev.bat` - Windows batch file to quickly start dev server
