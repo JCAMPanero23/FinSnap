@@ -1,8 +1,7 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI, Type } from '@google/genai';
 import { AppSettings } from '../types';
 
-const apiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
-const genAI = new GoogleGenerativeAI(apiKey);
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export interface ReceiptLineItem {
   description: string;
@@ -23,38 +22,9 @@ export async function parseReceiptLineItems(
   mimeType: string,
   settings: AppSettings
 ): Promise<ReceiptParseResult> {
-  const model = genAI.getGenerativeModel({
-    model: 'gemini-2.0-flash-exp',
-    generationConfig: {
-      responseMimeType: 'application/json',
-      responseSchema: {
-        type: 'object',
-        properties: {
-          lineItems: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                description: { type: 'string' },
-                amount: { type: 'number' },
-                quantity: { type: 'string' },
-                suggestedCategory: { type: 'string' },
-              },
-              required: ['description', 'amount', 'suggestedCategory'],
-            },
-          },
-          totalAmount: { type: 'number' },
-          merchant: { type: 'string' },
-          date: { type: 'string' },
-        },
-        required: ['lineItems', 'totalAmount'],
-      },
-    },
-  });
-
   const categoryList = settings.categories.map(c => c.name).join(', ');
 
-  const prompt = `Parse this receipt image and extract all line items.
+  const SYSTEM_INSTRUCTION = `Parse this receipt image and extract all line items.
 
 Available categories: ${categoryList}
 
@@ -71,19 +41,46 @@ Also extract:
 
 Group similar items intelligently. For example, "Milk 2.50" and "Eggs 3.00" can be separate items but both under "Groceries" category.`;
 
-  const result = await model.generateContent([
-    prompt,
-    {
-      inlineData: {
-        data: imageBase64,
-        mimeType: mimeType,
+  const parts = [
+    { inlineData: { data: imageBase64, mimeType: mimeType } }
+  ];
+
+  const response = await ai.models.generateContent({
+    model: "gemini-2.5-flash",
+    contents: { parts },
+    config: {
+      systemInstruction: SYSTEM_INSTRUCTION,
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          lineItems: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                description: { type: Type.STRING },
+                amount: { type: Type.NUMBER },
+                quantity: { type: Type.STRING },
+                suggestedCategory: { type: Type.STRING },
+              },
+              required: ['description', 'amount', 'suggestedCategory'],
+            },
+          },
+          totalAmount: { type: Type.NUMBER },
+          merchant: { type: Type.STRING },
+          date: { type: Type.STRING },
+        },
+        required: ['lineItems', 'totalAmount'],
       },
     },
-  ]);
+  });
 
-  const response = result.response;
-  const text = response.text();
-  const parsed: ReceiptParseResult = JSON.parse(text);
+  const jsonStr = response.text;
+  if (!jsonStr) {
+    throw new Error('No response from AI');
+  }
 
+  const parsed: ReceiptParseResult = JSON.parse(jsonStr);
   return parsed;
 }
