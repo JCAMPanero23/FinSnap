@@ -63,6 +63,17 @@ const CircularProgress: React.FC<CircularProgressProps> = ({
             transformOrigin: `${size / 2}px ${size / 2}px`,
           }}
         />
+
+        {/* Black border ring for visibility */}
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          stroke="#000000"
+          strokeWidth={0.5}
+          fill="none"
+          opacity={0.15}
+        />
       </svg>
 
       {/* Center content (icon) */}

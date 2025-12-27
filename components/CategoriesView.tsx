@@ -4,7 +4,7 @@ import {
   Tag, ShoppingBag, Utensils, Car, Zap, Film, Heart,
   Briefcase, ArrowRightLeft, MoreHorizontal, Home,
   Smartphone, Plane, Coffee, Gift, Music, Gamepad2,
-  BookOpen, GraduationCap, Baby, Dog, Wrench, Wifi, Fuel, Calendar, ChevronLeft, ChevronRight, Plus, X
+  BookOpen, GraduationCap, Baby, Dog, Wrench, Wifi, Fuel, Calendar, ChevronLeft, ChevronRight, Plus, X, Pencil, GripVertical
 } from 'lucide-react';
 import { useHoldGesture } from '../hooks/useHoldGesture';
 import { useDoubleTapGesture } from '../hooks/useDoubleTapGesture';
@@ -94,6 +94,7 @@ const SortableCategoryItem: React.FC<SortableCategoryItemProps> = ({
     attributes,
     listeners,
     setNodeRef,
+    setActivatorNodeRef,
     transform,
     transition,
     isDragging,
@@ -114,18 +115,17 @@ const SortableCategoryItem: React.FC<SortableCategoryItemProps> = ({
     onDoubleTap: () => !isEditMode && onAnalytics(cat),
   });
 
-  const combinedHandlers = {
+  const combinedHandlers = isEditMode ? {
+    onClick: (e: React.MouseEvent) => {
+      onEdit(cat);
+    },
+  } : {
     ...holdHandlers,
     onClick: (e: React.MouseEvent) => {
-      if (isEditMode) {
-        onEdit(cat);
-        return;
-      }
       holdHandlers.onMouseDown?.(e);
       doubleTapHandlers.onClick?.(e);
     },
     onTouchEnd: (e: React.TouchEvent) => {
-      if (isEditMode) return;
       holdHandlers.onTouchEnd?.(e);
       doubleTapHandlers.onTouchEnd?.(e);
     },
@@ -135,32 +135,46 @@ const SortableCategoryItem: React.FC<SortableCategoryItemProps> = ({
     <div
       ref={setNodeRef}
       style={style}
-      {...attributes}
-      {...(isEditMode ? listeners : {})}
-      className={`rounded-xl p-3 flex flex-col items-center gap-2 transition-all relative ${
+      className={`rounded-xl p-3 flex flex-col items-center gap-2 transition-all relative bg-white shadow-sm border border-slate-100 ${
         isActiveHold ? 'scale-95 opacity-80' : 'hover:shadow-md'
       } ${isEditMode ? 'animate-wiggle' : ''} ${
-        isDragging ? 'shadow-2xl scale-110 z-50 opacity-50' : ''
+        isDragging ? 'shadow-2xl scale-110 z-50 opacity-50 bg-white' : ''
       }`}
-      {...combinedHandlers}
-      onMouseMove={holdHandlers.onMouseMove}
-      onMouseUp={holdHandlers.onMouseUp}
-      onTouchStart={holdHandlers.onTouchStart}
-      onTouchMove={holdHandlers.onTouchMove}
+      {...(!isEditMode && {
+        ...combinedHandlers,
+        onMouseMove: holdHandlers.onMouseMove,
+        onMouseUp: holdHandlers.onMouseUp,
+        onTouchStart: holdHandlers.onTouchStart,
+        onTouchMove: holdHandlers.onTouchMove,
+      })}
     >
-      {/* Delete Badge in Edit Mode */}
+      {/* Edit Mode Buttons */}
       {isEditMode && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            if (window.confirm(`Delete category "${cat.name}"?`)) {
-              onDelete(cat.id);
-            }
-          }}
-          className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors z-10 shadow-md"
-        >
-          <X size={14} />
-        </button>
+        <>
+          {/* Pencil Icon - Edit Button (top-left) */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit(cat);
+            }}
+            className="absolute -top-2 -left-2 w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center hover:bg-blue-600 transition-colors z-10 shadow-md"
+          >
+            <Pencil size={12} />
+          </button>
+
+          {/* Delete Badge (top-right) */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              if (window.confirm(`Delete category "${cat.name}"?`)) {
+                onDelete(cat.id);
+              }
+            }}
+            className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors z-10 shadow-md"
+          >
+            <X size={14} />
+          </button>
+        </>
       )}
 
       {/* Circular Progress with Icon */}
@@ -197,6 +211,18 @@ const SortableCategoryItem: React.FC<SortableCategoryItemProps> = ({
           {isOverBudget ? 'Over!' : `${percentage.toFixed(0)}%`}
         </div>
       )}
+
+      {/* Drag Handle (bottom) - Only in Edit Mode */}
+      {isEditMode && (
+        <div
+          ref={setActivatorNodeRef}
+          {...listeners}
+          {...attributes}
+          className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-8 h-6 bg-slate-600 text-white rounded-full flex items-center justify-center hover:bg-slate-700 transition-colors cursor-move z-10 shadow-md touch-none"
+        >
+          <GripVertical size={14} />
+        </div>
+      )}
     </div>
   );
 };
@@ -221,7 +247,11 @@ const CategoriesView: React.FC<CategoriesViewProps> = ({
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
 
   const sensors = useSensors(
-    useSensor(PointerSensor),
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5,
+      },
+    }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     })
@@ -308,7 +338,7 @@ const CategoriesView: React.FC<CategoriesViewProps> = ({
   };
 
   return (
-    <div className="h-full flex flex-col pb-24 bg-slate-50">
+    <div className="h-full flex flex-col pb-24">
       <div className="px-6 py-4 bg-white border-b border-slate-100 sticky top-0 z-10 flex justify-between items-center">
          <div>
             <h2 className="text-2xl font-bold text-slate-800">Categories</h2>
