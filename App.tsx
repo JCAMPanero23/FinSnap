@@ -220,9 +220,24 @@ const App: React.FC = () => {
       ]);
 
       setTransactions(txns || []);
+
+      // Initialize order values for categories that don't have them
+      const categoriesWithOrder = (categories || []).map((cat, index) => ({
+        ...cat,
+        order: cat.order !== undefined ? cat.order : index
+      }));
+
+      // Save categories with order if any were missing order values
+      const needsOrderUpdate = (categories || []).some(cat => cat.order === undefined);
+      if (needsOrderUpdate) {
+        for (const cat of categoriesWithOrder) {
+          await saveCategory(cat);
+        }
+      }
+
       setSettings({
         baseCurrency: baseCurrency || 'USD',
-        categories: categories || [],
+        categories: categoriesWithOrder,
         accounts: accounts || [],
         recurringRules: rules || [],
         savingsGoals: [], // Not migrated yet

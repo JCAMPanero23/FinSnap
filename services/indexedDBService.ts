@@ -132,7 +132,15 @@ export async function clearAccounts(): Promise<void> {
 // Categories
 export async function getAllCategories(): Promise<Category[]> {
   const db = await initDB();
-  return db.getAll('categories');
+  const categories = await db.getAll('categories');
+  // Sort by order field (if present), otherwise maintain current order
+  return categories.sort((a, b) => {
+    if (a.order !== undefined && b.order !== undefined) {
+      return a.order - b.order;
+    }
+    // If order is not set, keep original order
+    return 0;
+  });
 }
 
 export async function saveCategory(category: Category): Promise<void> {

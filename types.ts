@@ -11,6 +11,7 @@ export interface Category {
   icon?: string; // Icon name from library
   isDefault?: boolean;
   monthlyBudget?: number; // Added for budgeting
+  order?: number; // Position in category list for custom ordering
 }
 
 export type AccountType = 'Bank' | 'Credit Card' | 'Cash' | 'Wallet' | 'Other';

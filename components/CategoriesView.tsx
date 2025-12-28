@@ -4,30 +4,13 @@ import {
   Tag, ShoppingBag, Utensils, Car, Zap, Film, Heart,
   Briefcase, ArrowRightLeft, MoreHorizontal, Home,
   Smartphone, Plane, Coffee, Gift, Music, Gamepad2,
-  BookOpen, GraduationCap, Baby, Dog, Wrench, Wifi, Fuel, Calendar, ChevronLeft, ChevronRight, Plus, X, Pencil, GripVertical
+  BookOpen, GraduationCap, Baby, Dog, Wrench, Wifi, Fuel, Calendar, ChevronLeft, ChevronRight, Plus, X, Pencil, ArrowLeftRight
 } from 'lucide-react';
 import { useHoldGesture } from '../hooks/useHoldGesture';
 import { useDoubleTapGesture } from '../hooks/useDoubleTapGesture';
 import CircularProgress from './CircularProgress';
 import CategorySummaryModal from './CategorySummaryModal';
 import CategoryEditModal from './CategoryEditModal';
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  DragEndEvent,
-} from '@dnd-kit/core';
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  useSortable,
-  rectSortingStrategy,
-} from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
 
 interface CategoriesViewProps {
   settings: AppSettings;
@@ -61,7 +44,7 @@ const ICON_LIB: Record<string, any> = {
   BookOpen, GraduationCap, Baby, Dog, Wrench, Wifi, Fuel, Tag
 };
 
-interface SortableCategoryItemProps {
+interface CategoryItemProps {
   cat: Category;
   spent: number;
   budget: number;
@@ -69,14 +52,16 @@ interface SortableCategoryItemProps {
   isOverBudget: boolean;
   baseCurrency: string;
   isEditMode: boolean;
+  isSelected: boolean;
   onEdit: (cat: Category) => void;
   onDelete: (id: string) => void;
   onAnalytics: (cat: Category) => void;
+  onToggleSelect: (id: string) => void;
   renderIcon: (iconName: string | undefined, size: number) => JSX.Element;
   onHold: () => void;
 }
 
-const SortableCategoryItem: React.FC<SortableCategoryItemProps> = ({
+const CategoryItem: React.FC<CategoryItemProps> = ({
   cat,
   spent,
   budget,
@@ -84,26 +69,14 @@ const SortableCategoryItem: React.FC<SortableCategoryItemProps> = ({
   isOverBudget,
   baseCurrency,
   isEditMode,
+  isSelected,
   onEdit,
   onDelete,
   onAnalytics,
+  onToggleSelect,
   renderIcon,
   onHold,
 }) => {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    setActivatorNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: cat.id, disabled: !isEditMode });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
 
   const { handlers: holdHandlers, isActiveHold } = useHoldGesture({
     onHold,
@@ -133,12 +106,10 @@ const SortableCategoryItem: React.FC<SortableCategoryItemProps> = ({
 
   return (
     <div
-      ref={setNodeRef}
-      style={style}
-      className={`rounded-xl p-3 flex flex-col items-center gap-2 transition-all relative bg-white shadow-sm border border-slate-100 ${
-        isActiveHold ? 'scale-95 opacity-80' : 'hover:shadow-md'
-      } ${isEditMode ? 'animate-wiggle' : ''} ${
-        isDragging ? 'shadow-2xl scale-110 z-50 opacity-50 bg-white' : ''
+      className={`rounded-xl p-3 flex flex-col items-center gap-2 transition-all relative bg-white shadow-sm border-2 ${
+        isSelected ? 'border-brand-500 shadow-lg scale-105' : 'border-slate-100'
+      } ${isActiveHold ? 'scale-95 opacity-80' : 'hover:shadow-md'} ${
+        isEditMode ? 'animate-wiggle' : ''
       }`}
       {...(!isEditMode && {
         ...combinedHandlers,
@@ -212,16 +183,22 @@ const SortableCategoryItem: React.FC<SortableCategoryItemProps> = ({
         </div>
       )}
 
-      {/* Drag Handle (bottom) - Only in Edit Mode */}
+      {/* Swap Button (bottom) - Only in Edit Mode */}
       {isEditMode && (
-        <div
-          ref={setActivatorNodeRef}
-          {...listeners}
-          {...attributes}
-          className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-8 h-6 bg-slate-600 text-white rounded-full flex items-center justify-center hover:bg-slate-700 transition-colors cursor-move z-10 shadow-md touch-none"
+        <button
+          onClick={(e) => {
+            console.log('🖱️ Swap button clicked for category:', cat.name, 'ID:', cat.id);
+            e.stopPropagation();
+            onToggleSelect(cat.id);
+          }}
+          className={`absolute -bottom-2 left-1/2 -translate-x-1/2 w-8 h-6 rounded-full flex items-center justify-center transition-colors z-10 shadow-md ${
+            isSelected
+              ? 'bg-brand-500 text-white hover:bg-brand-600'
+              : 'bg-slate-600 text-white hover:bg-slate-700'
+          }`}
         >
-          <GripVertical size={14} />
-        </div>
+          <ArrowLeftRight size={14} />
+        </button>
       )}
     </div>
   );
@@ -245,17 +222,7 @@ const CategoriesView: React.FC<CategoriesViewProps> = ({
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 5,
-      },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  );
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
 
   // Date Filter Type Navigation
   const handlePreviousFilterType = () => {
@@ -300,16 +267,56 @@ const CategoriesView: React.FC<CategoriesViewProps> = ({
      return <IconComp size={size} />;
   };
 
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
+  const handleToggleSelect = (categoryId: string) => {
+    console.log('🔄 handleToggleSelect called with categoryId:', categoryId);
 
-    if (over && active.id !== over.id) {
-      const oldIndex = settings.categories.findIndex((cat) => cat.id === active.id);
-      const newIndex = settings.categories.findIndex((cat) => cat.id === over.id);
+    setSelectedCategories(prev => {
+      console.log('📋 Current selection state:', prev);
+      console.log('📊 Selection length:', prev.length);
 
-      const reorderedCategories = arrayMove(settings.categories, oldIndex, newIndex);
-      onUpdateSettings({ ...settings, categories: reorderedCategories });
-    }
+      // If already selected, deselect
+      if (prev.includes(categoryId)) {
+        console.log('❌ Deselecting category:', categoryId);
+        return prev.filter(id => id !== categoryId);
+      }
+
+      // If this is the second selection, perform swap
+      if (prev.length === 1) {
+        console.log('🔀 SWAPPING - Second selection detected');
+        const firstId = prev[0];
+        console.log('1️⃣ First category ID:', firstId);
+        console.log('2️⃣ Second category ID:', categoryId);
+
+        const firstIndex = settings.categories.findIndex(cat => cat.id === firstId);
+        const secondIndex = settings.categories.findIndex(cat => cat.id === categoryId);
+        console.log('📍 First index:', firstIndex, 'Second index:', secondIndex);
+
+        console.log('📦 Current categories order:', settings.categories.map(c => c.name));
+
+        // Swap positions
+        const newCategories = [...settings.categories];
+        [newCategories[firstIndex], newCategories[secondIndex]] =
+          [newCategories[secondIndex], newCategories[firstIndex]];
+
+        // Assign order values to all categories to preserve custom ordering
+        const categoriesWithOrder = newCategories.map((cat, index) => ({
+          ...cat,
+          order: index
+        }));
+
+        console.log('📦 New categories order:', categoriesWithOrder.map(c => `${c.name}(${c.order})`));
+        console.log('✅ Calling onUpdateSettings with new category order');
+        onUpdateSettings({ ...settings, categories: categoriesWithOrder });
+
+        // Clear selection after swap
+        console.log('🧹 Clearing selection');
+        return [];
+      }
+
+      // Add to selection (first selection)
+      console.log('➕ Adding to selection (first category):', categoryId);
+      return [...prev, categoryId];
+    });
   };
 
   const handleSaveCategory = (categoryData: Partial<Category>) => {
@@ -335,6 +342,11 @@ const CategoriesView: React.FC<CategoriesViewProps> = ({
   const handleDeleteCategory = (categoryId: string) => {
     const updated = settings.categories.filter(c => c.id !== categoryId);
     onUpdateSettings({ ...settings, categories: updated });
+  };
+
+  const handleExitEditMode = () => {
+    setIsEditMode(false);
+    setSelectedCategories([]); // Clear selection when exiting edit mode
   };
 
   return (
@@ -443,63 +455,54 @@ const CategoriesView: React.FC<CategoriesViewProps> = ({
           </div>
         )}
 
-        {/* 3-Column Grid Layout with Drag & Drop */}
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragEnd={handleDragEnd}
-        >
-          <SortableContext
-            items={settings.categories.map(cat => cat.id)}
-            strategy={rectSortingStrategy}
-          >
-            <div className="grid grid-cols-3 gap-4">
-              {settings.categories.map(cat => {
-                const spent = categoryStats[cat.name] || 0;
-                const budget = cat.monthlyBudget || 0;
-                const percentage = budget > 0 ? Math.min(100, (spent / budget) * 100) : 0;
-                const isOverBudget = budget > 0 && spent > budget;
+        {/* 3-Column Grid Layout with Swap Selection */}
+        <div className="grid grid-cols-3 gap-4">
+          {settings.categories.map(cat => {
+            const spent = categoryStats[cat.name] || 0;
+            const budget = cat.monthlyBudget || 0;
+            const percentage = budget > 0 ? Math.min(100, (spent / budget) * 100) : 0;
+            const isOverBudget = budget > 0 && spent > budget;
 
-                return (
-                  <SortableCategoryItem
-                    key={cat.id}
-                    cat={cat}
-                    spent={spent}
-                    budget={budget}
-                    percentage={percentage}
-                    isOverBudget={isOverBudget}
-                    baseCurrency={settings.baseCurrency}
-                    isEditMode={isEditMode}
-                    onEdit={setEditingCategory}
-                    onDelete={handleDeleteCategory}
-                    onAnalytics={setAnalyticsCategory}
-                    renderIcon={renderIcon}
-                    onHold={() => setIsEditMode(true)}
-                  />
-                );
-              })}
+            return (
+              <CategoryItem
+                key={cat.id}
+                cat={cat}
+                spent={spent}
+                budget={budget}
+                percentage={percentage}
+                isOverBudget={isOverBudget}
+                baseCurrency={settings.baseCurrency}
+                isEditMode={isEditMode}
+                isSelected={selectedCategories.includes(cat.id)}
+                onEdit={setEditingCategory}
+                onDelete={handleDeleteCategory}
+                onAnalytics={setAnalyticsCategory}
+                onToggleSelect={handleToggleSelect}
+                renderIcon={renderIcon}
+                onHold={() => setIsEditMode(true)}
+              />
+            );
+          })}
 
-              {/* Add Category Card (in edit mode) */}
-              {isEditMode && (
-                <button
-                  onClick={() => setIsCreatingCategory(true)}
-                  className="rounded-xl p-3 flex flex-col items-center justify-center gap-2 border-2 border-dashed border-slate-300 hover:border-brand-500 hover:bg-brand-50 transition-all min-h-[140px]"
-                >
-                  <div className="w-12 h-12 rounded-full bg-brand-500 text-white flex items-center justify-center">
-                    <Plus size={24} />
-                  </div>
-                  <div className="text-xs font-bold text-slate-600">Add Category</div>
-                </button>
-              )}
-            </div>
-          </SortableContext>
-        </DndContext>
+          {/* Add Category Card (in edit mode) */}
+          {isEditMode && (
+            <button
+              onClick={() => setIsCreatingCategory(true)}
+              className="rounded-xl p-3 flex flex-col items-center justify-center gap-2 border-2 border-dashed border-slate-300 hover:border-brand-500 hover:bg-brand-50 transition-all min-h-[140px]"
+            >
+              <div className="w-12 h-12 rounded-full bg-brand-500 text-white flex items-center justify-center">
+                <Plus size={24} />
+              </div>
+              <div className="text-xs font-bold text-slate-600">Add Category</div>
+            </button>
+          )}
+        </div>
 
         {/* Done Button (in edit mode) */}
         {isEditMode && (
           <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-20">
             <button
-              onClick={() => setIsEditMode(false)}
+              onClick={handleExitEditMode}
               className="px-8 py-3 bg-brand-600 text-white rounded-full shadow-lg hover:bg-brand-700 transition-colors font-bold"
             >
               Done

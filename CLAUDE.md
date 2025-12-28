@@ -341,17 +341,22 @@ Comprehensive developer tools for testing and data management:
 ### Gesture Controls
 - **Double-Tap**: Opens CategorySummaryModal (analytics, read-only)
 - **3-Second Hold**: Enters global edit mode
-  - Drag & drop to reorder categories
-  - Tap category to edit (name, icon, color, budget)
-  - Delete badge (X) to remove category
-  - "Add Category" card to create new
-  - "Done" button to exit edit mode
+  - **Pencil button (top-left)**: Edit category details (name, icon, color, budget)
+  - **Delete badge (top-right)**: Remove category with confirmation
+  - **Swap button (bottom center)**: Select categories to swap positions
+    - Tap swap button on first category to select it (highlighted with brand-500 border)
+    - Tap swap button on second category to automatically swap positions
+    - Tap swap button again on selected category to deselect
+  - **"Add Category" card**: Create new category
+  - **"Done" button**: Exit edit mode and clear selection
 
 ### UI Enhancements
 - Circular category icons (not square)
-- 360° budget progress rings around icons
-- No white card backgrounds (cleaner design)
+- 360° budget progress rings around icons with thin black border for visibility
+- Individual white card backgrounds for each category
+- Selected categories highlighted with brand-500 border and scale-105
 - 2-line category names with line-clamp
+- Swap-based reordering (not drag-and-drop) for better mobile compatibility
 
 ## AI Receipt Splitting
 
