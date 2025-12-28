@@ -33,6 +33,46 @@ npx cap sync android
 npx cap open android
 ```
 
+## Building Android APK
+
+### Important: flatDir Configuration Issue
+
+The Capacitor-generated Android build files contain a deprecated `flatDir` repository configuration that causes APK build failures ("App not installed as package appears to be invalid" error).
+
+**Problem**: Capacitor 8.0.0 generates `android/capacitor-cordova-android-plugins/build.gradle` with a `flatDir` repository pointing to non-existent directories, which corrupts APK packaging.
+
+**Solution**: After running `npx cap sync android`, you must manually remove the `flatDir` block from the generated file.
+
+#### Fix Steps:
+
+1. **After running `npx cap sync android`**, edit `android/capacitor-cordova-android-plugins/build.gradle`
+
+2. **Find and remove** lines 39-41:
+   ```gradle
+   flatDir{
+       dirs 'src/main/libs', 'libs'
+   }
+   ```
+
+3. **The repositories block should look like this**:
+   ```gradle
+   repositories {
+       google()
+       mavenCentral()
+   }
+   ```
+
+4. **In Android Studio**:
+   - File → Sync Project with Gradle Files
+   - Build → Clean Project
+   - Build → Build Bundle(s) / APK(s) → Build APK(s)
+
+5. **APK location**: `android/app/build/outputs/apk/debug/app-debug.apk`
+
+**Note**: This fix must be reapplied every time you run `npx cap sync android` because Capacitor regenerates the file from its template.
+
+**Why this isn't committed**: The entire `android/` directory is in `.gitignore` as it's considered generated build artifacts by Capacitor. This is standard practice for Capacitor projects.
+
 ## Environment Setup
 
 ### For Local Development
