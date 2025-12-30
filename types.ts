@@ -14,7 +14,7 @@ export interface Category {
   order?: number; // Position in category list for custom ordering
 }
 
-export type AccountType = 'Bank' | 'Credit Card' | 'Cash' | 'Wallet' | 'Other';
+export type AccountType = 'Bank' | 'Credit Card' | 'Cash' | 'Wallet' | 'Loan/BNPL' | 'Other';
 
 export interface Account {
   id: string;
@@ -32,9 +32,16 @@ export interface Account {
   totalCreditLimit?: number; // Max limit for credit cards (Required to calc debt from Avl Limit)
   monthlySpendingLimit?: number; // Budget warning threshold
   paymentDueDay?: number; // Day of month (1-31) for credit card payments
+
+  // Loan/BNPL specific
+  loanPrincipal?: number; // Original loan amount
+  loanInstallments?: number; // Total number of installments
+  loanStartDate?: string; // ISO date when loan started
 }
 
 export type Frequency = 'MONTHLY' | 'WEEKLY' | 'YEARLY';
+
+export type RecurrencePattern = 'ONCE' | 'MONTHLY' | 'WEEKLY' | 'CUSTOM';
 
 export interface RecurringRule {
   id: string;
@@ -80,6 +87,7 @@ export interface AppSettings {
   recurringRules: RecurringRule[];
   savingsGoals: SavingsGoal[];
   warranties: WarrantyItem[];
+  scheduledTransactions: ScheduledTransaction[];
 
   // Gradient Background Settings
   gradientStartColor?: string; // Default: #d0dddf
@@ -125,7 +133,7 @@ export interface Transaction {
   isTransfer?: boolean; // New flag to identify transfers
 }
 
-export type View = 'dashboard' | 'accounts' | 'categories' | 'add' | 'history' | 'settings' | 'calendar' | 'planning' | 'warranties';
+export type View = 'dashboard' | 'accounts' | 'categories' | 'add' | 'history' | 'settings' | 'calendar' | 'planning' | 'warranties' | 'bills';
 
 export interface CategoryStat {
   name: string;
@@ -137,4 +145,36 @@ export interface MonthlyStat {
   name: string;
   income: number;
   expense: number;
+}
+
+export interface ScheduledTransaction {
+  id: string;
+  userId?: string;
+  amount: number;
+  currency: string;
+  merchant: string;
+  category: string;
+  type: TransactionType;
+  accountId?: string;
+
+  // Scheduling
+  dueDate: string; // ISO date YYYY-MM-DD
+  recurrencePattern?: RecurrencePattern;
+  recurrenceInterval?: number; // e.g., 2 for "every 2 months"
+  recurrenceEndDate?: string;
+
+  // Status
+  status: 'PENDING' | 'PAID' | 'SKIPPED' | 'OVERDUE';
+  matchedTransactionId?: string;
+  clearedDate?: string; // Actual date paid (for cheques)
+
+  // Cheque specific
+  isCheque?: boolean;
+  chequeNumber?: string;
+  chequeImage?: string; // Base64
+  seriesId?: string; // Links batch-created cheques
+
+  notes?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
