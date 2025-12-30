@@ -1,5 +1,5 @@
 import { ScheduledTransaction, TransactionType } from '../types';
-import { createScheduledTransaction } from './scheduledTransactionsService';
+import { createScheduledTransaction, deleteScheduledTransaction } from './scheduledTransactionsService';
 import { v4 as uuidv4 } from 'uuid';
 
 export interface BatchChequeParams {
@@ -22,46 +22,68 @@ export interface BatchChequeParams {
 export async function createBatchCheques(
   params: BatchChequeParams
 ): Promise<ScheduledTransaction[]> {
+  // Validate inputs
+  if (params.numberOfCheques <= 0) {
+    throw new Error('numberOfCheques must be positive');
+  }
+  if (params.intervalValue <= 0) {
+    throw new Error('intervalValue must be positive');
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(params.firstChequeDate)) {
+    throw new Error('firstChequeDate must be in YYYY-MM-DD format');
+  }
+  if (params.chequeImages && params.chequeImages.length !== params.numberOfCheques) {
+    throw new Error(`chequeImages array length (${params.chequeImages.length}) must match numberOfCheques (${params.numberOfCheques})`);
+  }
+
   const seriesId = uuidv4();
   const createdCheques: ScheduledTransaction[] = [];
 
-  for (let i = 0; i < params.numberOfCheques; i++) {
-    // Calculate due date based on frequency
-    const dueDate = calculateDueDate(
-      params.firstChequeDate,
-      i,
-      params.frequency,
-      params.intervalValue
-    );
+  try {
+    for (let i = 0; i < params.numberOfCheques; i++) {
+      // Calculate due date based on frequency
+      const dueDate = calculateDueDate(
+        params.firstChequeDate,
+        i,
+        params.frequency,
+        params.intervalValue
+      );
 
-    // Generate cheque number
-    const chequeNumber = params.startingChequeNumber
-      ? String(params.startingChequeNumber + i)
-      : undefined;
+      // Generate cheque number
+      const chequeNumber = params.startingChequeNumber
+        ? String(params.startingChequeNumber + i)
+        : undefined;
 
-    // Get cheque image if provided
-    const chequeImage = params.chequeImages?.[i];
+      // Get cheque image if provided
+      const chequeImage = params.chequeImages?.[i];
 
-    const cheque = await createScheduledTransaction({
-      merchant: params.merchant,
-      amount: params.amount,
-      currency: params.currency,
-      category: params.category,
-      type: TransactionType.EXPENSE,
-      accountId: params.accountId,
-      dueDate,
-      recurrencePattern: 'ONCE', // Each cheque is a one-time payment
-      isCheque: true,
-      chequeNumber,
-      chequeImage,
-      seriesId,
-      notes: `Cheque #${i + 1} of ${params.numberOfCheques}`,
-    });
+      const cheque = await createScheduledTransaction({
+        merchant: params.merchant,
+        amount: params.amount,
+        currency: params.currency,
+        category: params.category,
+        type: TransactionType.EXPENSE,
+        accountId: params.accountId,
+        dueDate,
+        recurrencePattern: 'ONCE', // Each cheque is a one-time payment
+        isCheque: true,
+        chequeNumber,
+        chequeImage,
+        seriesId,
+        notes: `Cheque #${i + 1} of ${params.numberOfCheques}`,
+      });
 
-    createdCheques.push(cheque);
+      createdCheques.push(cheque);
+    }
+
+    return createdCheques;
+  } catch (error) {
+    // Rollback: delete any created cheques
+    for (const cheque of createdCheques) {
+      await deleteScheduledTransaction(cheque.id).catch(() => {});
+    }
+    throw new Error(`Failed to create batch cheques: ${error instanceof Error ? error.message : String(error)}`);
   }
-
-  return createdCheques;
 }
 
 /**
@@ -73,7 +95,9 @@ function calculateDueDate(
   frequency: 'MONTHLY' | 'WEEKLY' | 'CUSTOM',
   intervalValue: number
 ): string {
-  const date = new Date(firstDate);
+  // Force UTC interpretation to avoid timezone bugs
+  const [year, month, day] = firstDate.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
 
   if (frequency === 'MONTHLY') {
     date.setMonth(date.getMonth() + index * intervalValue);

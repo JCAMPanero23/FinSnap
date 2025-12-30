@@ -8,6 +8,9 @@ import {
   initDB,
 } from './indexedDBService';
 
+// Re-export for external use
+export { deleteScheduledTransaction };
+
 /**
  * Create a single scheduled transaction
  */
