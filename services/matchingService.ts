@@ -55,7 +55,10 @@ function scoreMatch(
 
   // Amount matching
   const amountDiff = Math.abs(tx.amount - st.amount);
-  const amountPercent = (amountDiff / st.amount) * 100;
+  // Handle zero-amount scheduled transactions
+  const amountPercent = st.amount !== 0
+    ? (amountDiff / st.amount) * 100
+    : (amountDiff === 0 ? 0 : 100);
 
   if (amountDiff === 0) {
     score += 100;
@@ -69,8 +72,9 @@ function scoreMatch(
   }
 
   // Merchant matching
-  const txMerchant = tx.merchant.toLowerCase();
-  const stMerchant = st.merchant.toLowerCase();
+  // Defensive programming for null/undefined merchants
+  const txMerchant = (tx.merchant || '').toLowerCase();
+  const stMerchant = (st.merchant || '').toLowerCase();
 
   if (txMerchant === stMerchant) {
     score += 100;
@@ -112,6 +116,10 @@ function scoreMatch(
  * Simple fuzzy matching (Levenshtein distance < 3)
  */
 function fuzzyMatch(str1: string, str2: string): boolean {
+  // Reject if length difference is too large (fuzzy match won't be meaningful)
+  const lengthDiff = Math.abs(str1.length - str2.length);
+  if (lengthDiff > 5) return false; // No way to match with only 3 edits
+
   const distance = levenshteinDistance(str1, str2);
   return distance <= 3;
 }
