@@ -5,6 +5,7 @@ import {
   saveScheduledTransaction,
   deleteScheduledTransaction,
   getScheduledTransactionsBySeries,
+  initDB,
 } from './indexedDBService';
 
 /**
@@ -76,12 +77,23 @@ export async function markAsSkipped(id: string, notes?: string): Promise<void> {
  */
 export async function updateOverdueStatus(): Promise<void> {
   const all = await getAllScheduledTransactions();
-  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  const today = new Date().toISOString().split('T')[0];
+  const updates: ScheduledTransaction[] = [];
 
   for (const st of all) {
     if (st.status === 'PENDING' && st.dueDate < today) {
-      await updateScheduledTransaction(st.id, { status: 'OVERDUE' });
+      updates.push({ ...st, status: 'OVERDUE', updatedAt: new Date().toISOString() });
     }
+  }
+
+  // Batch save all updates in single transaction
+  if (updates.length > 0) {
+    const db = await initDB();
+    const tx = db.transaction('scheduled_transactions', 'readwrite');
+    for (const updated of updates) {
+      await tx.store.put(updated);
+    }
+    await tx.done;
   }
 }
 
@@ -117,7 +129,10 @@ export async function getUpcoming(days: number = 30): Promise<ScheduledTransacti
  */
 export async function deleteSeries(seriesId: string): Promise<void> {
   const seriesItems = await getScheduledTransactionsBySeries(seriesId);
+  const db = await initDB();
+  const tx = db.transaction('scheduled_transactions', 'readwrite');
   for (const item of seriesItems) {
-    await deleteScheduledTransaction(item.id);
+    await tx.store.delete(item.id);
   }
+  await tx.done;
 }
