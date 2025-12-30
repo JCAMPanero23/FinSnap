@@ -1,5 +1,5 @@
 import { openDB, DBSchema, IDBPDatabase } from 'idb';
-import { Transaction, Account, Category, RecurringRule, WarrantyItem } from '../types';
+import { Transaction, Account, Category, RecurringRule, WarrantyItem, ScheduledTransaction } from '../types';
 
 interface FinSnapDB extends DBSchema {
   transactions: {
@@ -27,10 +27,15 @@ interface FinSnapDB extends DBSchema {
     key: string;
     value: any;
   };
+  scheduled_transactions: {
+    key: string;
+    value: ScheduledTransaction;
+    indexes: { 'dueDate': string; 'status': string; 'seriesId': string; 'accountId': string };
+  };
 }
 
 const DB_NAME = 'finsnap_db';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let dbInstance: IDBPDatabase<FinSnapDB> | null = null;
 
@@ -66,6 +71,15 @@ export async function initDB(): Promise<IDBPDatabase<FinSnapDB>> {
       // Warranties store
       if (!db.objectStoreNames.contains('warranties')) {
         db.createObjectStore('warranties', { keyPath: 'id' });
+      }
+
+      // Scheduled transactions store
+      if (!db.objectStoreNames.contains('scheduled_transactions')) {
+        const schedStore = db.createObjectStore('scheduled_transactions', { keyPath: 'id' });
+        schedStore.createIndex('dueDate', 'dueDate');
+        schedStore.createIndex('status', 'status');
+        schedStore.createIndex('seriesId', 'seriesId');
+        schedStore.createIndex('accountId', 'accountId');
       }
 
       // Settings store (key-value pairs)
@@ -229,6 +243,46 @@ export async function clearSettings(): Promise<void> {
   await tx.done;
 }
 
+// Scheduled Transactions
+export async function getAllScheduledTransactions(): Promise<ScheduledTransaction[]> {
+  const db = await initDB();
+  return db.getAll('scheduled_transactions');
+}
+
+export async function getScheduledTransaction(id: string): Promise<ScheduledTransaction | undefined> {
+  const db = await initDB();
+  return db.get('scheduled_transactions', id);
+}
+
+export async function saveScheduledTransaction(scheduledTransaction: ScheduledTransaction): Promise<void> {
+  const db = await initDB();
+  await db.put('scheduled_transactions', scheduledTransaction);
+}
+
+export async function deleteScheduledTransaction(id: string): Promise<void> {
+  const db = await initDB();
+  await db.delete('scheduled_transactions', id);
+}
+
+export async function getScheduledTransactionsByStatus(status: string): Promise<ScheduledTransaction[]> {
+  const db = await initDB();
+  const index = db.transaction('scheduled_transactions').store.index('status');
+  return index.getAll(status);
+}
+
+export async function getScheduledTransactionsBySeries(seriesId: string): Promise<ScheduledTransaction[]> {
+  const db = await initDB();
+  const index = db.transaction('scheduled_transactions').store.index('seriesId');
+  return index.getAll(seriesId);
+}
+
+export async function clearScheduledTransactions(): Promise<void> {
+  const db = await initDB();
+  const tx = db.transaction('scheduled_transactions', 'readwrite');
+  await tx.store.clear();
+  await tx.done;
+}
+
 // Clear all data
 export async function clearAllData(): Promise<void> {
   await clearTransactions();
@@ -236,5 +290,6 @@ export async function clearAllData(): Promise<void> {
   await clearCategories();
   await clearRecurringRules();
   await clearWarranties();
+  await clearScheduledTransactions();
   await clearSettings();
 }
