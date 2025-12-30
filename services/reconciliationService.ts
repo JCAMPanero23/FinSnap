@@ -42,13 +42,16 @@ export function checkReconciliation(
   const difference = Math.abs(account.balance - expectedBalance);
 
   // Determine if reconciliation needed
-  const threshold = Math.max(100, account.balance * 0.05); // 100 or 5%, whichever is larger
+  // Use absolute value to handle negative balances (credit cards)
+  const threshold = Math.max(100, Math.abs(account.balance) * 0.05); // 100 or 5%, whichever is larger
   const needsReconciliation = difference > threshold;
 
   // Determine severity
   let severity: ReconciliationResult['severity'] = 'none';
   if (needsReconciliation) {
-    const percentDiff = (difference / Math.abs(account.balance)) * 100;
+    const percentDiff = account.balance === 0
+      ? 100  // Treat any difference on zero balance as 100%
+      : (difference / Math.abs(account.balance)) * 100;
     if (difference > 500 || percentDiff > 10) {
       severity = 'critical';
     } else if (difference > 200 || percentDiff > 5) {
@@ -85,10 +88,14 @@ function calculateExpectedBalance(
     snapshotBalance = -(account.totalCreditLimit - snapshot.parsedMeta.availableCredit);
   }
 
-  // Get all transactions after snapshot
+  // Get all transactions after snapshot (excluding the snapshot itself)
   const snapshotDate = new Date(snapshot.date);
   const transactionsAfter = allTransactions
-    .filter(t => t.accountId === account.id && new Date(t.date) > snapshotDate)
+    .filter(t =>
+      t.accountId === account.id &&
+      new Date(t.date) >= snapshotDate &&
+      t.id !== snapshot.id  // Exclude the snapshot transaction itself
+    )
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
   // Calculate delta
@@ -111,10 +118,21 @@ export function checkAllAccounts(
   accounts: Account[],
   transactions: Transaction[]
 ): Map<string, ReconciliationResult> {
-  const results = new Map<string, ReconciliationResult>();
+  // Group transactions by account once for better performance
+  const txByAccount = new Map<string, Transaction[]>();
+  for (const tx of transactions) {
+    if (tx.accountId) {
+      if (!txByAccount.has(tx.accountId)) {
+        txByAccount.set(tx.accountId, []);
+      }
+      txByAccount.get(tx.accountId)!.push(tx);
+    }
+  }
 
+  const results = new Map<string, ReconciliationResult>();
   for (const account of accounts) {
-    const result = checkReconciliation(account, transactions);
+    const accountTxs = txByAccount.get(account.id) || [];
+    const result = checkReconciliation(account, accountTxs);
     if (result.needsReconciliation) {
       results.set(account.id, result);
     }
