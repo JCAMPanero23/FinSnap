@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { ScheduledTransaction, Account } from '../types';
 import { PlusCircle, Calendar } from 'lucide-react';
 import { getAllScheduledTransactions } from '../services/indexedDBService';
@@ -26,11 +26,7 @@ const BillsDebtsView: React.FC<BillsDebtsViewProps> = ({
   const [upcomingItems, setUpcomingItems] = useState<ScheduledTransaction[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadScheduledTransactions();
-  }, []);
-
-  const loadScheduledTransactions = async () => {
+  const loadScheduledTransactions = useCallback(async () => {
     setLoading(true);
     try {
       // Update overdue status first
@@ -52,7 +48,11 @@ const BillsDebtsView: React.FC<BillsDebtsViewProps> = ({
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadScheduledTransactions();
+  }, [loadScheduledTransactions]);
 
   // Group cheques by series
   const chequeSeries = scheduledTransactions
@@ -193,7 +193,7 @@ const BillsDebtsView: React.FC<BillsDebtsViewProps> = ({
                   <div className="w-full bg-purple-200 rounded-full h-2 mt-2">
                     <div
                       className="bg-purple-600 h-2 rounded-full"
-                      style={{ width: `${(paid / total) * 100}%` }}
+                      style={{ width: `${Math.min(100, (paid / total) * 100)}%` }}
                     />
                   </div>
                 </div>
@@ -212,7 +212,7 @@ const BillsDebtsView: React.FC<BillsDebtsViewProps> = ({
               const principal = account.loanPrincipal || 0;
               const paid = principal + account.balance; // balance is negative
               const remaining = -account.balance;
-              const progress = (paid / principal) * 100;
+              const progress = principal > 0 ? Math.min(100, Math.max(0, (paid / principal) * 100)) : 0;
 
               // Find next payment
               const nextPayment = upcomingItems.find(
@@ -250,7 +250,7 @@ const BillsDebtsView: React.FC<BillsDebtsViewProps> = ({
       )}
 
       {/* Empty State */}
-      {overdueItems.length === 0 && upcomingItems.length === 0 && loanAccounts.length === 0 && (
+      {overdueItems.length === 0 && upcomingItems.length === 0 && loanAccounts.length === 0 && Object.keys(chequeSeries).length === 0 && (
         <div className="text-center py-12 text-gray-500">
           <Calendar size={48} className="mx-auto mb-4 opacity-50" />
           <p>No scheduled bills or loans yet</p>
