@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
-import { ScheduledTransaction, TransactionType, Account, Category } from '../types';
+import { ScheduledTransaction, TransactionType, Account, Category, RecurrencePattern } from '../types';
 
 interface ScheduledTransactionFormProps {
   onClose: () => void;
@@ -23,9 +23,10 @@ const ScheduledTransactionForm: React.FC<ScheduledTransactionFormProps> = ({
   const [type, setType] = useState<TransactionType>(initialData?.type || TransactionType.EXPENSE);
   const [accountId, setAccountId] = useState(initialData?.accountId || accounts[0]?.id || '');
   const [dueDate, setDueDate] = useState(initialData?.dueDate || '');
-  const [recurrencePattern, setRecurrencePattern] = useState<'ONCE' | 'MONTHLY' | 'WEEKLY'>(
+  const [recurrencePattern, setRecurrencePattern] = useState<RecurrencePattern>(
     initialData?.recurrencePattern || 'ONCE'
   );
+  const [recurrenceInterval, setRecurrenceInterval] = useState(initialData?.recurrenceInterval || 1);
   const [notes, setNotes] = useState(initialData?.notes || '');
   const [saving, setSaving] = useState(false);
 
@@ -44,6 +45,8 @@ const ScheduledTransactionForm: React.FC<ScheduledTransactionFormProps> = ({
         accountId,
         dueDate,
         recurrencePattern,
+        recurrenceInterval: recurrencePattern !== 'ONCE' ? recurrenceInterval : undefined,
+        status: 'PENDING',
         notes,
       });
       onClose();
@@ -154,14 +157,30 @@ const ScheduledTransactionForm: React.FC<ScheduledTransactionFormProps> = ({
             <label className="block text-sm font-medium text-gray-700 mb-1">Recurrence</label>
             <select
               value={recurrencePattern}
-              onChange={e => setRecurrencePattern(e.target.value as any)}
+              onChange={e => setRecurrencePattern(e.target.value as RecurrencePattern)}
               className="w-full border border-gray-300 rounded-lg px-3 py-2"
             >
               <option value="ONCE">One-time</option>
               <option value="MONTHLY">Monthly</option>
               <option value="WEEKLY">Weekly</option>
+              <option value="CUSTOM">Custom</option>
             </select>
           </div>
+
+          {recurrencePattern !== 'ONCE' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Interval (Every N {recurrencePattern === 'MONTHLY' ? 'months' : recurrencePattern === 'WEEKLY' ? 'weeks' : 'days'})
+              </label>
+              <input
+                type="number"
+                min="1"
+                value={recurrenceInterval}
+                onChange={e => setRecurrenceInterval(parseInt(e.target.value) || 1)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2"
+              />
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
