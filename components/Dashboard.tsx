@@ -64,26 +64,26 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [upcomingBills, setUpcomingBills] = useState<ScheduledTransaction[]>([]);
 
   useEffect(() => {
+    const checkReconciliation = () => {
+      const issues = checkAllAccounts(accounts, transactions);
+      setReconciliationIssues(issues);
+    };
+
+    const loadScheduledData = async () => {
+      try {
+        const overdue = await getByStatus('OVERDUE');
+        setOverdueCount(overdue.length);
+
+        const upcoming = await getUpcoming(7); // Next 7 days
+        setUpcomingBills(upcoming);
+      } catch (error) {
+        console.error('Error loading scheduled data:', error);
+      }
+    };
+
     checkReconciliation();
     loadScheduledData();
   }, [accounts, transactions]);
-
-  const checkReconciliation = () => {
-    const issues = checkAllAccounts(accounts, transactions);
-    setReconciliationIssues(issues);
-  };
-
-  const loadScheduledData = async () => {
-    try {
-      const overdue = await getByStatus('OVERDUE');
-      setOverdueCount(overdue.length);
-
-      const upcoming = await getUpcoming(7); // Next 7 days
-      setUpcomingBills(upcoming);
-    } catch (error) {
-      console.error('Error loading scheduled data:', error);
-    }
-  };
 
   // Use base currency from settings
   const displayCurrency = baseCurrency;
@@ -266,7 +266,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                   onAcceptCalculated={() => {
                     if (onAcceptCalculatedBalance) {
                       onAcceptCalculatedBalance(accountId, result.expectedBalance);
-                      checkReconciliation();
+                      // Reconciliation will automatically re-run via useEffect when accounts change
                     }
                   }}
                   onManualAdjust={() => {
@@ -275,8 +275,8 @@ const Dashboard: React.FC<DashboardProps> = ({
                     }
                   }}
                   onReviewTransactions={() => {
-                    // Navigate to history filtered by this account
-                    // Implementation depends on navigation structure
+                    // TODO: Implement navigation to filtered history
+                    alert(`Review transactions for ${account.name} to investigate discrepancy`);
                   }}
                   onDismiss={() => {
                     const newIssues = new Map(reconciliationIssues);
@@ -353,7 +353,8 @@ const Dashboard: React.FC<DashboardProps> = ({
                 .filter(a => a.type === 'Loan/BNPL')
                 .map(account => {
                   const principal = account.loanPrincipal || 0;
-                  const paid = principal + account.balance;
+                  const currentDebt = Math.abs(account.balance); // Ensure positive
+                  const paid = Math.max(0, principal - currentDebt); // Paid amount can't be negative
                   const progress = principal > 0 ? Math.min(100, Math.max(0, (paid / principal) * 100)) : 0;
                   const nextPayment = upcomingBills.find(b => b.accountId === account.id);
 
