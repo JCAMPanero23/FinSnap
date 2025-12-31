@@ -105,7 +105,6 @@ const App: React.FC = () => {
     score: number;
     reasons: string[];
   } | null>(null);
-  const [pendingUnmatchedTransactions, setPendingUnmatchedTransactions] = useState<Transaction[]>([]);
 
   // Date Filter State
   const [dateFilter, setDateFilter] = useState<'month' | 'year' | 'week' | 'custom' | 'all'>('month');
@@ -271,6 +270,7 @@ const App: React.FC = () => {
         recurringRules: rules || [],
         savingsGoals: [], // Not migrated yet
         warranties: warranties || [],
+        scheduledTransactions: scheduledData || [],
         gradientStartColor: gradientStartColor || '#d0dddf',
         gradientEndColor: gradientEndColor || '#dcfefb',
         gradientAngle: gradientAngle || 135,
@@ -362,36 +362,24 @@ const App: React.FC = () => {
     }));
 
     try {
-      // Process each transaction and separate matched vs unmatched
-      const matched: Transaction[] = [];
-      const unmatched: Transaction[] = [];
-
-      for (const tx of txnsWithIds) {
+      // Only trigger smart matching for single-transaction inputs
+      // For bulk imports (multiple transactions), skip matching to avoid complexity
+      if (txnsWithIds.length === 1) {
+        const tx = txnsWithIds[0];
         const match = await getBestMatch(tx);
         if (match && match.score >= 150) {
-          // Store first match for confirmation
-          if (matched.length === 0) {
-            setMatchingCandidate({
-              transaction: tx,
-              scheduledTransaction: match.scheduledTransaction,
-              score: match.score,
-              reasons: match.reasons,
-            });
-          }
-          matched.push(tx);
-        } else {
-          unmatched.push(tx);
+          // Show matching confirmation
+          setMatchingCandidate({
+            transaction: tx,
+            scheduledTransaction: match.scheduledTransaction,
+            score: match.score,
+            reasons: match.reasons,
+          });
+          return; // Exit to show match confirmation
         }
       }
 
-      // If we have matches, show confirmation and store unmatched for later
-      if (matched.length > 0) {
-        // Store unmatched transactions for processing after match confirmation
-        setPendingUnmatchedTransactions(unmatched);
-        return; // Exit to show match confirmation
-      }
-
-      // No matches found, proceed with normal flow for all transactions
+      // No matches found OR bulk import - proceed with normal flow for all transactions
       await saveTransactionsNormally(txnsWithIds);
     } catch (error) {
       console.error('Error adding transactions:', error);
@@ -439,12 +427,6 @@ const App: React.FC = () => {
 
       setMatchingCandidate(null);
 
-      // Process any pending unmatched transactions
-      if (pendingUnmatchedTransactions.length > 0) {
-        await saveTransactionsNormally(pendingUnmatchedTransactions);
-        setPendingUnmatchedTransactions([]);
-      }
-
       await loadUserData();
       setCurrentView('dashboard');
     } catch (error) {
@@ -457,12 +439,6 @@ const App: React.FC = () => {
 
     // Save the rejected match transaction normally
     await saveTransactionsNormally([matchingCandidate.transaction]);
-
-    // Also save any pending unmatched transactions
-    if (pendingUnmatchedTransactions.length > 0) {
-      await saveTransactionsNormally(pendingUnmatchedTransactions);
-      setPendingUnmatchedTransactions([]);
-    }
 
     setMatchingCandidate(null);
   };
