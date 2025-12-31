@@ -13,9 +13,13 @@ import CalendarView from './components/CalendarView';
 import PlanningView from './components/PlanningView';
 import CategoriesView from './components/CategoriesView';
 import WarrantiesView from './components/WarrantiesView';
+import BillsDebtsView from './components/BillsDebtsView';
+import ScheduledTransactionForm from './components/ScheduledTransactionForm';
+import BatchChequeCreator from './components/BatchChequeCreator';
+import MatchingConfirmationModal from './components/MatchingConfirmationModal';
 import BottomTabs from './components/BottomTabs';
 import NavigationDrawer from './components/NavigationDrawer';
-import { Transaction, View, AppSettings, TransactionType, Category, Account, RecurringRule, SavingsGoal, WarrantyItem } from './types';
+import { Transaction, View, AppSettings, TransactionType, Category, Account, RecurringRule, SavingsGoal, WarrantyItem, ScheduledTransaction } from './types';
 import { v4 as uuidv4 } from 'uuid';
 import {
   getAllTransactions,
@@ -37,7 +41,17 @@ import {
   deleteWarranty as deleteWarrantyDB,
   clearTransactions,
   clearAllData,
+  getAllScheduledTransactions,
+  saveScheduledTransaction,
 } from './services/indexedDBService';
+import {
+  createScheduledTransaction,
+  updateScheduledTransaction,
+  markAsPaid,
+  markAsSkipped,
+} from './services/scheduledTransactionsService';
+import { createBatchCheques } from './services/batchChequeService';
+import { getBestMatch } from './services/matchingService';
 import { isBiometricEnabled, setBiometricEnabled } from './services/biometricService';
 import BiometricLock from './components/BiometricLock';
 import BackupRestoreModal from './components/BackupRestoreModal';
@@ -80,6 +94,15 @@ const App: React.FC = () => {
   const [biometricLocked, setBiometricLocked] = useState(true);
   const [showBackupRestoreModal, setShowBackupRestoreModal] = useState(false);
   const [migrating, setMigrating] = useState(false);
+  const [scheduledTransactions, setScheduledTransactions] = useState<ScheduledTransaction[]>([]);
+  const [showScheduledForm, setShowScheduledForm] = useState(false);
+  const [showBatchChequeCreator, setShowBatchChequeCreator] = useState(false);
+  const [matchingCandidate, setMatchingCandidate] = useState<{
+    transaction: Transaction;
+    scheduledTransaction: ScheduledTransaction;
+    score: number;
+    reasons: string[];
+  } | null>(null);
 
   // Date Filter State
   const [dateFilter, setDateFilter] = useState<'month' | 'year' | 'week' | 'custom' | 'all'>('month');
@@ -207,6 +230,7 @@ const App: React.FC = () => {
         gradientStartColor,
         gradientEndColor,
         gradientAngle,
+        scheduledData,
       ] = await Promise.all([
         getAllTransactions(),
         getAllAccounts(),
@@ -217,9 +241,11 @@ const App: React.FC = () => {
         getSetting('gradientStartColor'),
         getSetting('gradientEndColor'),
         getSetting('gradientAngle'),
+        getAllScheduledTransactions(),
       ]);
 
       setTransactions(txns || []);
+      setScheduledTransactions(scheduledData || []);
 
       // Initialize order values for categories that don't have them
       const categoriesWithOrder = (categories || []).map((cat, index) => ({
@@ -292,14 +318,9 @@ const App: React.FC = () => {
     return newTxnDateTime >= mostRecentDateTime;
   };
 
-  const handleAddTransactions = async (newTransactions: Omit<Transaction, 'id'>[]) => {
-    const txnsWithIds = newTransactions.map(tx => ({
-      ...tx,
-      id: uuidv4(),
-    }));
-
+  const saveTransactionsNormally = async (newTransactions: Transaction[]) => {
     // Save to IndexedDB
-    for (const tx of txnsWithIds) {
+    for (const tx of newTransactions) {
       await saveTransaction(tx);
 
       // Update account balances
@@ -329,6 +350,90 @@ const App: React.FC = () => {
     // Reload data
     await loadUserData();
     setCurrentView('dashboard');
+  };
+
+  const handleAddTransactions = async (newTransactions: Omit<Transaction, 'id'>[]) => {
+    const txnsWithIds = newTransactions.map(tx => ({
+      ...tx,
+      id: uuidv4(),
+    }));
+
+    try {
+      // Check for matches before saving
+      for (const tx of txnsWithIds) {
+        const match = await getBestMatch(tx);
+        if (match) {
+          // Show matching confirmation
+          setMatchingCandidate({
+            transaction: tx,
+            scheduledTransaction: match.scheduledTransaction,
+            score: match.score,
+            reasons: match.reasons,
+          });
+          // Wait for user confirmation before proceeding
+          return; // Exit early, will continue after user confirms/rejects
+        }
+      }
+
+      // No matches found, proceed with normal flow
+      await saveTransactionsNormally(txnsWithIds);
+    } catch (error) {
+      console.error('Error adding transactions:', error);
+    }
+  };
+
+  const handleConfirmMatch = async () => {
+    if (!matchingCandidate) return;
+
+    try {
+      // Save the transaction
+      await saveTransaction(matchingCandidate.transaction);
+
+      // Mark scheduled transaction as paid
+      await markAsPaid(
+        matchingCandidate.scheduledTransaction.id,
+        matchingCandidate.transaction.id,
+        matchingCandidate.transaction.date
+      );
+
+      // Update account balance (use the SAME logic from saveTransactionsNormally)
+      const account = settings.accounts.find(
+        a => a.id === matchingCandidate.transaction.accountId
+      );
+      if (account) {
+        const tx = matchingCandidate.transaction;
+        let newBalance = account.balance;
+
+        if (tx.parsedMeta?.availableBalance !== undefined) {
+          newBalance = tx.parsedMeta.availableBalance;
+        } else if (tx.parsedMeta?.availableCredit !== undefined && account.totalCreditLimit) {
+          newBalance = -(account.totalCreditLimit - tx.parsedMeta.availableCredit);
+        } else {
+          if (tx.type === TransactionType.EXPENSE || tx.isTransfer) {
+            newBalance -= tx.amount;
+          } else if (tx.type === TransactionType.INCOME) {
+            newBalance += tx.amount;
+          }
+        }
+
+        const updatedAccount = { ...account, balance: newBalance };
+        await saveAccount(updatedAccount);
+      }
+
+      setMatchingCandidate(null);
+      await loadUserData();
+      setCurrentView('dashboard');
+    } catch (error) {
+      console.error('Error confirming match:', error);
+    }
+  };
+
+  const handleRejectMatch = async () => {
+    if (!matchingCandidate) return;
+
+    // Save transaction without matching
+    await saveTransactionsNormally([matchingCandidate.transaction]);
+    setMatchingCandidate(null);
   };
 
   const handleDeleteTransaction = async (id: string) => {
@@ -469,6 +574,70 @@ const App: React.FC = () => {
       savingsGoals: [],
       warranties: []
     });
+  };
+
+  const handleCreateScheduledTransaction = async (data: Partial<ScheduledTransaction>) => {
+    try {
+      await createScheduledTransaction(data as any);
+      await loadUserData();
+      setShowScheduledForm(false);
+    } catch (error) {
+      console.error('Error creating scheduled transaction:', error);
+      throw error;
+    }
+  };
+
+  const handleCreateBatchCheques = async (data: {
+    merchant: string;
+    amount: number;
+    currency: string;
+    category: string;
+    accountId: string;
+    firstChequeDate: string;
+    frequency: 'MONTHLY' | 'WEEKLY' | 'CUSTOM';
+    intervalValue: number;
+    numberOfCheques: number;
+    startingChequeNumber?: number;
+    chequeImages?: string[];
+  }) => {
+    try {
+      await createBatchCheques(data);
+      await loadUserData();
+      setShowBatchChequeCreator(false);
+    } catch (error) {
+      console.error('Error creating batch cheques:', error);
+      throw error;
+    }
+  };
+
+  const handleMarkPaid = async (scheduledTx: ScheduledTransaction) => {
+    // Open add transaction with pre-filled data
+    // This will trigger smart matching automatically
+    setCurrentView('add');
+    // Note: AddTransaction component will need to support pre-filled data
+  };
+
+  const handleSkipScheduled = async (scheduledTx: ScheduledTransaction) => {
+    try {
+      const reason = prompt('Reason for skipping (optional):');
+      await markAsSkipped(scheduledTx.id, reason || undefined);
+      await loadUserData();
+    } catch (error) {
+      console.error('Error skipping scheduled transaction:', error);
+    }
+  };
+
+  const handleAcceptCalculatedBalance = async (accountId: string, newBalance: number) => {
+    try {
+      const account = settings.accounts.find(a => a.id === accountId);
+      if (!account) return;
+
+      const updatedAccount = { ...account, balance: newBalance };
+      await saveAccount(updatedAccount);
+      await loadUserData();
+    } catch (error) {
+      console.error('Error accepting calculated balance:', error);
+    }
   };
 
   // Navigation handlers
@@ -765,6 +934,18 @@ const App: React.FC = () => {
           onDelete={(id) => { handleDeleteTransaction(id); setEditingTransaction(null); }}
           onSave={handleUpdateTransaction}
           onAddRule={handleAddRuleFromTransaction}
+        />
+      )}
+
+      {/* Matching Confirmation Modal */}
+      {matchingCandidate && (
+        <MatchingConfirmationModal
+          transaction={matchingCandidate.transaction}
+          scheduledTransaction={matchingCandidate.scheduledTransaction}
+          score={matchingCandidate.score}
+          reasons={matchingCandidate.reasons}
+          onConfirm={handleConfirmMatch}
+          onReject={handleRejectMatch}
         />
       )}
 
