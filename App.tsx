@@ -573,15 +573,7 @@ const App: React.FC = () => {
     await supabase.auth.signOut();
     setSession(null);
     setTransactions([]);
-    setSettings({
-      baseCurrency: 'USD',
-      categories: [],
-      accounts: [],
-      recurringRules: [],
-      savingsGoals: [],
-      warranties: [],
-      scheduledTransactions: []
-    });
+    setSettings(DEFAULT_SETTINGS);
   };
 
   const handleCreateScheduledTransaction = async (data: Partial<ScheduledTransaction>) => {
