@@ -1,7 +1,10 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend } from 'recharts';
-import { Transaction, TransactionType, Account } from '../types';
+import { Transaction, TransactionType, Account, ScheduledTransaction } from '../types';
 import { TrendingUp, TrendingDown, Wallet, Calendar, ChevronLeft, ChevronRight, CreditCard } from 'lucide-react';
+import { checkAllAccounts, ReconciliationResult } from '../services/reconciliationService';
+import { getByStatus, getUpcoming } from '../services/scheduledTransactionsService';
+import ReconciliationWarning from './ReconciliationWarning';
 
 interface DashboardProps {
   transactions: Transaction[];
@@ -19,6 +22,9 @@ interface DashboardProps {
   gradientStartColor?: string;
   gradientEndColor?: string;
   gradientAngle?: number;
+  onAcceptCalculatedBalance?: (accountId: string, newBalance: number) => void;
+  onManualAdjustBalance?: (accountId: string) => void;
+  onViewBills?: () => void;
 }
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658'];
@@ -44,10 +50,40 @@ const Dashboard: React.FC<DashboardProps> = ({
   currentPeriodLabel,
   gradientStartColor,
   gradientEndColor,
-  gradientAngle
+  gradientAngle,
+  onAcceptCalculatedBalance,
+  onManualAdjustBalance,
+  onViewBills
 }) => {
   // Dashboard view filter state
   const [viewFilter, setViewFilter] = useState<'all' | 'cash' | 'credit' | 'debt'>('all');
+
+  // Reconciliation and scheduled transactions state
+  const [reconciliationIssues, setReconciliationIssues] = useState<Map<string, ReconciliationResult>>(new Map());
+  const [overdueCount, setOverdueCount] = useState(0);
+  const [upcomingBills, setUpcomingBills] = useState<ScheduledTransaction[]>([]);
+
+  useEffect(() => {
+    checkReconciliation();
+    loadScheduledData();
+  }, [accounts, transactions]);
+
+  const checkReconciliation = () => {
+    const issues = checkAllAccounts(accounts, transactions);
+    setReconciliationIssues(issues);
+  };
+
+  const loadScheduledData = async () => {
+    try {
+      const overdue = await getByStatus('OVERDUE');
+      setOverdueCount(overdue.length);
+
+      const upcoming = await getUpcoming(7); // Next 7 days
+      setUpcomingBills(upcoming);
+    } catch (error) {
+      console.error('Error loading scheduled data:', error);
+    }
+  };
 
   // Use base currency from settings
   const displayCurrency = baseCurrency;
@@ -215,6 +251,136 @@ const Dashboard: React.FC<DashboardProps> = ({
 
       {/* Content with padding restored */}
       <div className="relative px-6 pt-6 pb-24 space-y-6">
+        {/* Reconciliation Warnings */}
+        {reconciliationIssues.size > 0 && (
+          <div className="space-y-3 mb-6">
+            {Array.from(reconciliationIssues.entries()).map(([accountId, result]) => {
+              const account = accounts.find(a => a.id === accountId);
+              if (!account) return null;
+
+              return (
+                <ReconciliationWarning
+                  key={accountId}
+                  account={account}
+                  result={result}
+                  onAcceptCalculated={() => {
+                    if (onAcceptCalculatedBalance) {
+                      onAcceptCalculatedBalance(accountId, result.expectedBalance);
+                      checkReconciliation();
+                    }
+                  }}
+                  onManualAdjust={() => {
+                    if (onManualAdjustBalance) {
+                      onManualAdjustBalance(accountId);
+                    }
+                  }}
+                  onReviewTransactions={() => {
+                    // Navigate to history filtered by this account
+                    // Implementation depends on navigation structure
+                  }}
+                  onDismiss={() => {
+                    const newIssues = new Map(reconciliationIssues);
+                    newIssues.delete(accountId);
+                    setReconciliationIssues(newIssues);
+                  }}
+                />
+              );
+            })}
+          </div>
+        )}
+
+        {/* Overdue Bills Alert */}
+        {overdueCount > 0 && (
+          <div className="bg-red-50 border-2 border-red-300 rounded-lg p-4 mb-6">
+            <div className="flex items-center gap-3">
+              <div className="text-2xl">🚨</div>
+              <div className="flex-1">
+                <h3 className="font-bold text-red-800">Overdue Bills ({overdueCount})</h3>
+                <p className="text-sm text-red-700 mt-1">
+                  You have {overdueCount} overdue bill{overdueCount > 1 ? 's' : ''} that need attention
+                </p>
+              </div>
+              <button
+                onClick={onViewBills}
+                className="px-4 py-2 bg-red-500 text-white rounded-lg font-medium hover:bg-red-600"
+              >
+                View Bills
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Upcoming Bills (Next 7 Days) */}
+        {upcomingBills.length > 0 && (
+          <div className="mb-6">
+            <div className="flex justify-between items-center mb-3">
+              <h2 className="text-lg font-bold text-gray-900">📅 Upcoming Bills (Next 7 Days)</h2>
+              {onViewBills && (
+                <button
+                  onClick={onViewBills}
+                  className="text-sm text-brand-600 hover:text-brand-700 font-medium"
+                >
+                  View All →
+                </button>
+              )}
+            </div>
+            <div className="space-y-2">
+              {upcomingBills.slice(0, 3).map(bill => (
+                <div key={bill.id} className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <div className="font-semibold text-gray-900">{bill.merchant}</div>
+                      <div className="text-sm text-gray-600">
+                        {new Date(bill.dueDate).toLocaleDateString()}
+                      </div>
+                    </div>
+                    <div className="text-lg font-bold text-gray-900">
+                      {bill.amount} {bill.currency}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Loan Accounts Summary */}
+        {accounts.filter(a => a.type === 'Loan/BNPL').length > 0 && (
+          <div className="mb-6">
+            <h2 className="text-lg font-bold text-gray-900 mb-3">💰 Loan Accounts</h2>
+            <div className="space-y-2">
+              {accounts
+                .filter(a => a.type === 'Loan/BNPL')
+                .map(account => {
+                  const principal = account.loanPrincipal || 0;
+                  const paid = principal + account.balance;
+                  const progress = principal > 0 ? Math.min(100, Math.max(0, (paid / principal) * 100)) : 0;
+                  const nextPayment = upcomingBills.find(b => b.accountId === account.id);
+
+                  return (
+                    <div key={account.id} className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <div className="font-semibold text-gray-900">{account.name}</div>
+                      <div className="text-sm text-gray-600 mt-1">
+                        {paid.toFixed(2)} / {principal} {account.currency} paid
+                      </div>
+                      <div className="w-full bg-blue-200 rounded-full h-2 mt-2">
+                        <div
+                          className="bg-blue-600 h-2 rounded-full"
+                          style={{ width: `${progress}%` }}
+                        />
+                      </div>
+                      {nextPayment && (
+                        <div className="text-sm text-blue-700 mt-2">
+                          Next: {new Date(nextPayment.dueDate).toLocaleDateString()} - {nextPayment.amount} {nextPayment.currency}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+        )}
+
         {/* Compact Month Selector Pill */}
       <div className="bg-gradient-to-r from-brand-600 to-brand-500 rounded-full px-4 py-3 text-white shadow-md">
         <div className="flex items-center justify-between">
