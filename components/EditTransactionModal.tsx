@@ -149,6 +149,7 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
         recurringRules: [],
         savingsGoals: [],
         warranties: [],
+        scheduledTransactions: [],
       };
 
       const result = await parseReceiptLineItems(

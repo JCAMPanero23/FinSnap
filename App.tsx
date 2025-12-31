@@ -66,6 +66,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   recurringRules: [],
   savingsGoals: [],
   warranties: [],
+  scheduledTransactions: [],
   gradientStartColor: '#d0dddf',
   gradientEndColor: '#dcfefb',
   gradientAngle: 135
@@ -85,6 +86,7 @@ const App: React.FC = () => {
     recurringRules: [],
     savingsGoals: [],
     warranties: [],
+    scheduledTransactions: [],
     gradientStartColor: '#d0dddf',
     gradientEndColor: '#dcfefb',
     gradientAngle: 135
@@ -103,6 +105,7 @@ const App: React.FC = () => {
     score: number;
     reasons: string[];
   } | null>(null);
+  const [pendingUnmatchedTransactions, setPendingUnmatchedTransactions] = useState<Transaction[]>([]);
 
   // Date Filter State
   const [dateFilter, setDateFilter] = useState<'month' | 'year' | 'week' | 'custom' | 'all'>('month');
@@ -359,26 +362,40 @@ const App: React.FC = () => {
     }));
 
     try {
-      // Check for matches before saving
+      // Process each transaction and separate matched vs unmatched
+      const matched: Transaction[] = [];
+      const unmatched: Transaction[] = [];
+
       for (const tx of txnsWithIds) {
         const match = await getBestMatch(tx);
-        if (match) {
-          // Show matching confirmation
-          setMatchingCandidate({
-            transaction: tx,
-            scheduledTransaction: match.scheduledTransaction,
-            score: match.score,
-            reasons: match.reasons,
-          });
-          // Wait for user confirmation before proceeding
-          return; // Exit early, will continue after user confirms/rejects
+        if (match && match.score >= 150) {
+          // Store first match for confirmation
+          if (matched.length === 0) {
+            setMatchingCandidate({
+              transaction: tx,
+              scheduledTransaction: match.scheduledTransaction,
+              score: match.score,
+              reasons: match.reasons,
+            });
+          }
+          matched.push(tx);
+        } else {
+          unmatched.push(tx);
         }
       }
 
-      // No matches found, proceed with normal flow
+      // If we have matches, show confirmation and store unmatched for later
+      if (matched.length > 0) {
+        // Store unmatched transactions for processing after match confirmation
+        setPendingUnmatchedTransactions(unmatched);
+        return; // Exit to show match confirmation
+      }
+
+      // No matches found, proceed with normal flow for all transactions
       await saveTransactionsNormally(txnsWithIds);
     } catch (error) {
       console.error('Error adding transactions:', error);
+      alert('Failed to save transactions. Please try again.');
     }
   };
 
@@ -421,6 +438,13 @@ const App: React.FC = () => {
       }
 
       setMatchingCandidate(null);
+
+      // Process any pending unmatched transactions
+      if (pendingUnmatchedTransactions.length > 0) {
+        await saveTransactionsNormally(pendingUnmatchedTransactions);
+        setPendingUnmatchedTransactions([]);
+      }
+
       await loadUserData();
       setCurrentView('dashboard');
     } catch (error) {
@@ -431,8 +455,15 @@ const App: React.FC = () => {
   const handleRejectMatch = async () => {
     if (!matchingCandidate) return;
 
-    // Save transaction without matching
+    // Save the rejected match transaction normally
     await saveTransactionsNormally([matchingCandidate.transaction]);
+
+    // Also save any pending unmatched transactions
+    if (pendingUnmatchedTransactions.length > 0) {
+      await saveTransactionsNormally(pendingUnmatchedTransactions);
+      setPendingUnmatchedTransactions([]);
+    }
+
     setMatchingCandidate(null);
   };
 
@@ -572,7 +603,8 @@ const App: React.FC = () => {
       accounts: [],
       recurringRules: [],
       savingsGoals: [],
-      warranties: []
+      warranties: [],
+      scheduledTransactions: []
     });
   };
 
