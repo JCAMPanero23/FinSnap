@@ -724,6 +724,12 @@ const App: React.FC = () => {
             gradientStartColor={settings.gradientStartColor}
             gradientEndColor={settings.gradientEndColor}
             gradientAngle={settings.gradientAngle}
+            onAcceptCalculatedBalance={handleAcceptCalculatedBalance}
+            onManualAdjustBalance={(accountId) => {
+              // Navigate to accounts view for manual adjustment
+              setCurrentView('accounts');
+            }}
+            onViewBills={() => setCurrentView('bills')}
           />
         );
       case 'add':
@@ -809,6 +815,20 @@ const App: React.FC = () => {
           <WarrantiesView
             settings={settings}
             onUpdateSettings={handleUpdateSettings}
+          />
+        );
+      case 'bills':
+        return (
+          <BillsDebtsView
+            accounts={settings.accounts}
+            onCreateScheduled={() => setShowScheduledForm(true)}
+            onCreateBatchCheques={() => setShowBatchChequeCreator(true)}
+            onMarkPaid={handleMarkPaid}
+            onSkip={handleSkipScheduled}
+            onViewScheduled={(st) => {
+              // Open details modal (can be implemented later)
+              console.log('View scheduled transaction:', st);
+            }}
           />
         );
       case 'settings':
@@ -946,6 +966,26 @@ const App: React.FC = () => {
           reasons={matchingCandidate.reasons}
           onConfirm={handleConfirmMatch}
           onReject={handleRejectMatch}
+        />
+      )}
+
+      {/* Scheduled Transaction Form */}
+      {showScheduledForm && (
+        <ScheduledTransactionForm
+          onClose={() => setShowScheduledForm(false)}
+          onSave={handleCreateScheduledTransaction}
+          accounts={settings.accounts}
+          categories={settings.categories}
+        />
+      )}
+
+      {/* Batch Cheque Creator */}
+      {showBatchChequeCreator && (
+        <BatchChequeCreator
+          onClose={() => setShowBatchChequeCreator(false)}
+          onSave={handleCreateBatchCheques}
+          accounts={settings.accounts}
+          categories={settings.categories}
         />
       )}
 
