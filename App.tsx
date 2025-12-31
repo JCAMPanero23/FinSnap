@@ -727,6 +727,7 @@ const App: React.FC = () => {
             onAcceptCalculatedBalance={handleAcceptCalculatedBalance}
             onManualAdjustBalance={(accountId) => {
               // Navigate to accounts view for manual adjustment
+              setSelectedAccountId(accountId);
               setCurrentView('accounts');
             }}
             onViewBills={() => setCurrentView('bills')}
