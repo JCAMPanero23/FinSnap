@@ -285,7 +285,11 @@ const AddTransaction: React.FC<AddTransactionProps> = ({ onAdd, onCancel, settin
                   <div className="font-bold text-slate-800 text-lg">{t.merchant}</div>
                   <div className="text-xs text-slate-500 uppercase tracking-wide font-semibold mt-1">{t.category}</div>
                 </div>
-                <div className={`font-bold text-lg ${t.type === TransactionType.INCOME ? 'text-green-600' : 'text-slate-800'}`}>
+                <div className={`font-bold text-lg ${
+                  t.type === TransactionType.INCOME ? 'text-green-600' :
+                  t.type === TransactionType.OBLIGATION ? 'text-orange-600' :
+                  'text-slate-800'
+                }`}>
                   {t.type === TransactionType.INCOME ? '+' : '-'}{t.currency} {t.amount.toFixed(2)}
                 </div>
               </div>
@@ -345,7 +349,7 @@ const AddTransaction: React.FC<AddTransactionProps> = ({ onAdd, onCancel, settin
   }
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col pb-24">
       <div className="mb-4">
         <h2 className="text-2xl font-bold text-slate-800 mb-4">Add Transaction</h2>
         
@@ -375,7 +379,7 @@ const AddTransaction: React.FC<AddTransactionProps> = ({ onAdd, onCancel, settin
            
            <div className="relative flex-1 mb-6 group flex flex-col gap-4">
               <textarea
-                className="w-full flex-1 p-5 bg-white rounded-2xl border-0 shadow-sm text-slate-700 text-lg placeholder:text-slate-300 focus:ring-2 focus:ring-brand-500 resize-none font-medium leading-relaxed"
+                className="w-full flex-1 min-h-[180px] p-5 bg-white rounded-2xl border-0 shadow-sm text-slate-700 text-lg placeholder:text-slate-300 focus:ring-2 focus:ring-brand-500 resize-none font-medium leading-relaxed"
                 placeholder={`Paste SMS or text here...\n\nOr upload a screenshot.`}
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
@@ -478,7 +482,7 @@ const AddTransaction: React.FC<AddTransactionProps> = ({ onAdd, onCancel, settin
              </div>
            )}
 
-           <div className="flex gap-3 pb-24">
+           <div className="flex gap-3">
              <button onClick={onCancel} className="py-4 px-6 rounded-xl font-semibold text-slate-500 hover:bg-slate-100 transition-colors">Cancel</button>
              <button 
                onClick={handleAnalyze}
@@ -587,7 +591,7 @@ const AddTransaction: React.FC<AddTransactionProps> = ({ onAdd, onCancel, settin
              )}
           </div>
 
-          <div className="flex gap-3 pb-24 mt-6">
+          <div className="flex gap-3 mt-6">
              <button onClick={onCancel} className="py-4 px-6 rounded-xl font-semibold text-slate-500 hover:bg-slate-100 transition-colors">Cancel</button>
              <button
                onClick={handleManualSubmit}

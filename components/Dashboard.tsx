@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend } from 'recharts';
 import { Transaction, TransactionType, Account, ScheduledTransaction } from '../types';
-import { TrendingUp, TrendingDown, Wallet, Calendar, ChevronLeft, ChevronRight, CreditCard } from 'lucide-react';
+import { TrendingUp, TrendingDown, Wallet, Calendar, ChevronLeft, ChevronRight, CreditCard, Receipt } from 'lucide-react';
 import { checkAllAccounts, ReconciliationResult } from '../services/reconciliationService';
 import { getByStatus, getUpcoming } from '../services/scheduledTransactionsService';
 import ReconciliationWarning from './ReconciliationWarning';
@@ -9,6 +9,7 @@ import ReconciliationWarning from './ReconciliationWarning';
 interface DashboardProps {
   transactions: Transaction[];
   accounts: Account[];
+  scheduledTransactions?: ScheduledTransaction[];
   baseCurrency: string;
   dateFilter: 'month' | 'year' | 'week' | 'custom' | 'all';
   onDateFilterChange: (filter: 'month' | 'year' | 'week' | 'custom' | 'all') => void;
@@ -38,6 +39,7 @@ const VIEW_FILTER_TYPES: Array<'all' | 'cash' | 'credit' | 'debt'> =
 const Dashboard: React.FC<DashboardProps> = ({
   transactions,
   accounts,
+  scheduledTransactions = [],
   baseCurrency,
   dateFilter,
   onDateFilterChange,
@@ -113,19 +115,23 @@ const Dashboard: React.FC<DashboardProps> = ({
     return accounts.reduce((sum, acc) => sum + (acc.balance || 0), 0);
   }, [accounts]);
 
-  // Calculate Cash Flow (Income vs Expense) for general stats
+  // Calculate Cash Flow (Income vs Expense vs Obligation) for general stats
   const summary = useMemo(() => {
     let income = 0;
     let expense = 0;
+    let obligation = 0;
 
     filteredByPayment.forEach(t => {
       if (t.type === TransactionType.INCOME) income += t.amount;
+      else if (t.type === TransactionType.OBLIGATION) obligation += t.amount;
       else expense += t.amount;
     });
 
     return {
       income,
-      expense
+      expense,
+      obligation,
+      totalOutgoing: expense + obligation
     };
   }, [filteredByPayment]);
 
@@ -141,6 +147,22 @@ const Dashboard: React.FC<DashboardProps> = ({
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value); // Sort desc
   }, [filteredByPayment]);
+
+  // Get upcoming scheduled obligations
+  const upcomingScheduled = useMemo(() => {
+    const today = new Date();
+    const futureDate = new Date();
+    futureDate.setDate(today.getDate() + 30); // Next 30 days
+
+    return scheduledTransactions
+      .filter(st => {
+        if (st.status !== 'PENDING') return false;
+        if (st.type !== TransactionType.OBLIGATION) return false;
+        const dueDate = new Date(st.dueDate);
+        return dueDate >= today && dueDate <= futureDate;
+      })
+      .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
+  }, [scheduledTransactions]);
 
   // Calculate total debt from credit card accounts
   const totalDebt = useMemo(() => {
@@ -624,26 +646,50 @@ const Dashboard: React.FC<DashboardProps> = ({
 
         {/* Income/Expense Stats */}
         {viewFilter !== 'debt' && (
-          <div className="flex justify-between items-center bg-white/10 rounded-xl p-3 backdrop-blur-sm">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-500/20 rounded-full">
-                <TrendingUp className="w-5 h-5 text-green-300" />
+          <div className="bg-white/10 rounded-xl p-3 backdrop-blur-sm space-y-2">
+            {/* Income & Outgoing Row */}
+            <div className="flex justify-between items-center">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-green-500/20 rounded-full">
+                  <TrendingUp className="w-5 h-5 text-green-300" />
+                </div>
+                <div>
+                  <div className="text-xs text-brand-100">Total Income</div>
+                  <div className="font-semibold text-green-300">+{summary.income.toFixed(0)}</div>
+                </div>
               </div>
-              <div>
-                <div className="text-xs text-brand-100">Total Income</div>
-                <div className="font-semibold text-green-300">+{summary.income.toFixed(0)}</div>
+              <div className="w-px h-8 bg-white/20 mx-2"></div>
+              <div className="flex items-center gap-3 text-right">
+                <div>
+                  <div className="text-xs text-brand-100">Total Outgoing</div>
+                  <div className="font-semibold text-red-300">-{summary.totalOutgoing.toFixed(0)}</div>
+                </div>
+                <div className="p-2 bg-red-500/20 rounded-full">
+                  <TrendingDown className="w-5 h-5 text-red-300" />
+                </div>
               </div>
             </div>
-            <div className="w-px h-8 bg-white/20 mx-2"></div>
-            <div className="flex items-center gap-3 text-right">
-              <div>
-                <div className="text-xs text-brand-100">Total Spent</div>
-                <div className="font-semibold text-red-300">-{summary.expense.toFixed(0)}</div>
+
+            {/* Obligations & Expenses Breakdown */}
+            {(summary.obligation > 0 || summary.expense > 0) && (
+              <div className="flex justify-around items-center pt-2 border-t border-white/10">
+                <div className="text-center">
+                  <div className="text-[10px] text-brand-100 uppercase tracking-wide">Obligations</div>
+                  <div className="font-semibold text-orange-300 flex items-center gap-1">
+                    <Receipt size={12} />
+                    {summary.obligation.toFixed(0)}
+                  </div>
+                </div>
+                <div className="w-px h-6 bg-white/10"></div>
+                <div className="text-center">
+                  <div className="text-[10px] text-brand-100 uppercase tracking-wide">Expenses</div>
+                  <div className="font-semibold text-red-300 flex items-center gap-1">
+                    <TrendingDown size={12} />
+                    {summary.expense.toFixed(0)}
+                  </div>
+                </div>
               </div>
-              <div className="p-2 bg-red-500/20 rounded-full">
-                <TrendingDown className="w-5 h-5 text-red-300" />
-              </div>
-            </div>
+            )}
           </div>
         )}
       </div>
@@ -716,6 +762,58 @@ const Dashboard: React.FC<DashboardProps> = ({
         </div>
       )}
 
+      {/* Upcoming Obligations */}
+      {upcomingScheduled.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between px-1">
+            <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+              <Receipt size={20} className="text-orange-500" />
+              Upcoming Obligations
+            </h3>
+            <button
+              onClick={onViewBills}
+              className="text-xs font-medium text-brand-600 hover:text-brand-700"
+            >
+              View All →
+            </button>
+          </div>
+          <div className="space-y-2">
+            {upcomingScheduled.slice(0, 3).map((st) => {
+              const daysUntil = Math.ceil((new Date(st.dueDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+              const isUrgent = daysUntil <= 3;
+
+              return (
+                <div
+                  key={st.id}
+                  className={`p-4 rounded-xl border ${
+                    isUrgent ? 'bg-orange-50 border-orange-200' : 'bg-white border-slate-100'
+                  } flex items-center justify-between shadow-sm`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                      isUrgent ? 'bg-orange-100 text-orange-600' : 'bg-orange-50 text-orange-500'
+                    }`}>
+                      <Receipt size={18} />
+                    </div>
+                    <div>
+                      <div className="font-semibold text-slate-800">{st.merchant}</div>
+                      <div className="text-xs text-slate-500">
+                        Due: {new Date(st.dueDate).toLocaleDateString()}
+                        {isUrgent && <span className="ml-2 text-orange-600 font-medium">• {daysUntil} day{daysUntil !== 1 ? 's' : ''} left!</span>}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-bold text-orange-600">-{st.amount.toFixed(0)}</div>
+                    <div className="text-xs text-slate-400">{st.currency}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Recent Activity */}
       <div className="space-y-3">
         <h3 className="text-lg font-bold text-slate-800 px-1">Recent Activity</h3>
@@ -728,9 +826,13 @@ const Dashboard: React.FC<DashboardProps> = ({
             <div key={t.id} className="bg-white p-4 rounded-xl shadow-md border border-slate-50 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                  t.type === TransactionType.EXPENSE ? 'bg-red-50 text-red-500' : 'bg-green-50 text-green-500'
+                  t.type === TransactionType.INCOME ? 'bg-green-50 text-green-500' :
+                  t.type === TransactionType.OBLIGATION ? 'bg-orange-50 text-orange-500' :
+                  'bg-red-50 text-red-500'
                 }`}>
-                  {t.type === TransactionType.EXPENSE ? <TrendingDown size={18} /> : <TrendingUp size={18} />}
+                  {t.type === TransactionType.INCOME ? <TrendingUp size={18} /> :
+                   t.type === TransactionType.OBLIGATION ? <Receipt size={18} /> :
+                   <TrendingDown size={18} />}
                 </div>
                 <div>
                   <div className="font-semibold text-slate-800">{t.merchant}</div>
@@ -738,9 +840,11 @@ const Dashboard: React.FC<DashboardProps> = ({
                 </div>
               </div>
               <div className={`font-bold ${
-                t.type === TransactionType.EXPENSE ? 'text-slate-800' : 'text-green-600'
+                t.type === TransactionType.INCOME ? 'text-green-600' :
+                t.type === TransactionType.OBLIGATION ? 'text-orange-600' :
+                'text-slate-800'
               }`}>
-                {t.type === TransactionType.EXPENSE ? '-' : '+'}{t.amount.toFixed(2)}
+                {t.type === TransactionType.INCOME ? '+' : '-'}{t.amount.toFixed(2)}
               </div>
             </div>
           ))

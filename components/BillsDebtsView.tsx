@@ -1,58 +1,63 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { ScheduledTransaction, Account } from '../types';
-import { PlusCircle, Calendar } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { ScheduledTransaction, Account, Transaction, TransactionType } from '../types';
+import { PlusCircle, Calendar, Receipt, CheckCircle2 } from 'lucide-react';
 import { getAllScheduledTransactions } from '../services/indexedDBService';
 import { updateOverdueStatus, getByStatus, getUpcoming } from '../services/scheduledTransactionsService';
+import ChequeSeriesModal from './ChequeSeriesModal';
+import InsufficientFundsWarning from './InsufficientFundsWarning';
+import { getAllInsufficientFundsWarnings } from '../services/insufficientFundsService';
 
 interface BillsDebtsViewProps {
   accounts: Account[];
+  scheduledTransactions: ScheduledTransaction[];
+  transactions: Transaction[];
   onCreateScheduled: () => void;
   onCreateBatchCheques: () => void;
   onMarkPaid: (scheduledTx: ScheduledTransaction) => void;
   onSkip: (scheduledTx: ScheduledTransaction) => void;
   onViewScheduled: (scheduledTx: ScheduledTransaction) => void;
+  onViewTransaction: (tx: Transaction) => void;
 }
 
 const BillsDebtsView: React.FC<BillsDebtsViewProps> = ({
   accounts,
+  scheduledTransactions,
+  transactions,
   onCreateScheduled,
   onCreateBatchCheques,
   onMarkPaid,
   onSkip,
   onViewScheduled,
+  onViewTransaction,
 }) => {
-  const [scheduledTransactions, setScheduledTransactions] = useState<ScheduledTransaction[]>([]);
   const [overdueItems, setOverdueItems] = useState<ScheduledTransaction[]>([]);
   const [upcomingItems, setUpcomingItems] = useState<ScheduledTransaction[]>([]);
   const [loading, setLoading] = useState(true);
-
-  const loadScheduledTransactions = useCallback(async () => {
-    setLoading(true);
-    try {
-      // Update overdue status first
-      await updateOverdueStatus();
-
-      // Load all scheduled transactions
-      const all = await getAllScheduledTransactions();
-      setScheduledTransactions(all);
-
-      // Get overdue
-      const overdue = await getByStatus('OVERDUE');
-      setOverdueItems(overdue);
-
-      // Get upcoming (next 30 days)
-      const upcoming = await getUpcoming(30);
-      setUpcomingItems(upcoming);
-    } catch (error) {
-      console.error('Error loading scheduled transactions:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const [selectedSeries, setSelectedSeries] = useState<ScheduledTransaction[] | null>(null);
 
   useEffect(() => {
-    loadScheduledTransactions();
-  }, [loadScheduledTransactions]);
+    const filterTransactions = async () => {
+      setLoading(true);
+      try {
+        // Update overdue status first
+        await updateOverdueStatus();
+
+        // Get overdue
+        const overdue = await getByStatus('OVERDUE');
+        setOverdueItems(overdue);
+
+        // Get upcoming (next 30 days)
+        const upcoming = await getUpcoming(30);
+        setUpcomingItems(upcoming);
+      } catch (error) {
+        console.error('Error filtering scheduled transactions:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    filterTransactions();
+  }, [scheduledTransactions]);
 
   // Group cheques by series
   const chequeSeries = scheduledTransactions
@@ -66,6 +71,22 @@ const BillsDebtsView: React.FC<BillsDebtsViewProps> = ({
 
   // Get loan accounts
   const loanAccounts = accounts.filter(a => a.type === 'Loan/BNPL');
+
+  // Check for insufficient funds warnings
+  const fundsWarnings = useMemo(() => {
+    return getAllInsufficientFundsWarnings(accounts, scheduledTransactions, 30);
+  }, [accounts, scheduledTransactions]);
+
+  // Get recent paid obligations (last 30 days)
+  const paidObligations = useMemo(() => {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    return transactions
+      .filter(t => t.type === TransactionType.OBLIGATION && new Date(t.date) >= thirtyDaysAgo)
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .slice(0, 10); // Show last 10
+  }, [transactions]);
 
   if (loading) {
     return (
@@ -95,6 +116,11 @@ const BillsDebtsView: React.FC<BillsDebtsViewProps> = ({
         </button>
       </div>
 
+      {/* Insufficient Funds Warnings */}
+      {fundsWarnings.length > 0 && (
+        <InsufficientFundsWarning warnings={fundsWarnings} />
+      )}
+
       {/* Overdue Section */}
       {overdueItems.length > 0 && (
         <div>
@@ -103,7 +129,8 @@ const BillsDebtsView: React.FC<BillsDebtsViewProps> = ({
             {overdueItems.map(item => (
               <div
                 key={item.id}
-                className="bg-red-50 border border-red-200 rounded-lg p-4"
+                className="bg-red-50 border border-red-200 rounded-lg p-4 cursor-pointer hover:shadow-md transition-shadow"
+                onClick={() => onViewScheduled(item)}
               >
                 <div className="flex justify-between items-start">
                   <div>
@@ -117,13 +144,19 @@ const BillsDebtsView: React.FC<BillsDebtsViewProps> = ({
                   </div>
                   <div className="flex gap-2">
                     <button
-                      onClick={() => onMarkPaid(item)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onMarkPaid(item);
+                      }}
                       className="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600"
                     >
                       Mark Paid
                     </button>
                     <button
-                      onClick={() => onSkip(item)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSkip(item);
+                      }}
                       className="bg-gray-300 text-gray-700 px-3 py-1 rounded text-sm hover:bg-gray-400"
                     >
                       Skip
@@ -175,15 +208,39 @@ const BillsDebtsView: React.FC<BillsDebtsViewProps> = ({
             {Object.entries(chequeSeries).map(([seriesId, cheques]: [string, ScheduledTransaction[]]) => {
               const paid = cheques.filter(c => c.status === 'PAID').length;
               const total = cheques.length;
+              const totalAmount = cheques.reduce((sum, c) => sum + c.amount, 0);
+              const cashedAmount = cheques.filter(c => c.status === 'PAID').reduce((sum, c) => sum + c.amount, 0);
               const nextCheque = cheques
                 .filter(c => c.status === 'PENDING')
                 .sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0];
 
               return (
-                <div key={seriesId} className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-                  <div className="font-semibold text-gray-900">{cheques[0].merchant}</div>
-                  <div className="text-sm text-gray-600 mt-1">
-                    {paid}/{total} cashed
+                <div
+                  key={seriesId}
+                  className="bg-purple-50 border border-purple-200 rounded-lg p-4 cursor-pointer hover:shadow-md transition-shadow"
+                  onClick={() => setSelectedSeries(cheques)}
+                >
+                  <div className="flex justify-between items-start mb-2">
+                    <div className="font-semibold text-gray-900">{cheques[0].merchant}</div>
+                    <div className="text-right">
+                      <div className="text-lg font-bold text-purple-700">{totalAmount.toFixed(0)} {cheques[0].currency}</div>
+                      <div className="text-xs text-gray-600">Total Amount</div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 mb-2">
+                    <div className="bg-white rounded px-2 py-1">
+                      <div className="text-xs text-gray-600">Cashed</div>
+                      <div className="font-semibold text-green-700">{cashedAmount.toFixed(0)} {cheques[0].currency}</div>
+                    </div>
+                    <div className="bg-white rounded px-2 py-1">
+                      <div className="text-xs text-gray-600">Remaining</div>
+                      <div className="font-semibold text-orange-700">{(totalAmount - cashedAmount).toFixed(0)} {cheques[0].currency}</div>
+                    </div>
+                  </div>
+
+                  <div className="text-sm text-gray-600">
+                    {paid}/{total} cheques cashed
                   </div>
                   {nextCheque && (
                     <div className="text-sm text-purple-700 mt-1">
@@ -249,13 +306,69 @@ const BillsDebtsView: React.FC<BillsDebtsViewProps> = ({
         </div>
       )}
 
+      {/* Paid Obligations Section */}
+      {paidObligations.length > 0 && (
+        <div>
+          <h2 className="text-lg font-bold text-gray-900 mb-3">✅ Recent Paid Obligations (Last 30 Days)</h2>
+          <div className="space-y-2">
+            {paidObligations.map(tx => {
+              const account = accounts.find(a => a.id === tx.accountId);
+              return (
+                <div
+                  key={tx.id}
+                  className="bg-green-50 border border-green-200 rounded-lg p-4 cursor-pointer hover:shadow-md transition-shadow"
+                  onClick={() => onViewTransaction(tx)}
+                >
+                  <div className="flex justify-between items-start">
+                    <div className="flex items-center gap-3 flex-1">
+                      <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center shrink-0">
+                        <CheckCircle2 size={20} className="text-green-600" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="font-semibold text-gray-900">{tx.merchant}</div>
+                        <div className="text-sm text-gray-600">
+                          {new Date(tx.date).toLocaleDateString()} • {tx.category}
+                        </div>
+                        {account && (
+                          <div className="text-xs text-gray-500 mt-1">
+                            Account: {account.name}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-lg font-bold text-orange-600">
+                        -{tx.amount.toFixed(2)}
+                      </div>
+                      <div className="text-xs text-gray-500">{tx.currency}</div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Empty State */}
-      {overdueItems.length === 0 && upcomingItems.length === 0 && loanAccounts.length === 0 && Object.keys(chequeSeries).length === 0 && (
+      {overdueItems.length === 0 && upcomingItems.length === 0 && loanAccounts.length === 0 && Object.keys(chequeSeries).length === 0 && paidObligations.length === 0 && (
         <div className="text-center py-12 text-gray-500">
           <Calendar size={48} className="mx-auto mb-4 opacity-50" />
           <p>No scheduled bills or loans yet</p>
           <p className="text-sm mt-2">Create your first scheduled transaction or loan account</p>
         </div>
+      )}
+
+      {/* Cheque Series Modal */}
+      {selectedSeries && (
+        <ChequeSeriesModal
+          cheques={selectedSeries}
+          onClose={() => setSelectedSeries(null)}
+          onEditCheque={(cheque) => {
+            setSelectedSeries(null);
+            onViewScheduled(cheque);
+          }}
+        />
       )}
     </div>
   );

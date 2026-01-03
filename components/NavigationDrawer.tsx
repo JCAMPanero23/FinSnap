@@ -7,6 +7,7 @@ import {
   Shield,
   Calendar,
   ChevronRight,
+  Receipt,
 } from 'lucide-react';
 import { View } from '../types';
 
@@ -43,6 +44,12 @@ const NavigationDrawer: React.FC<NavigationDrawerProps> = ({
     label: string;
     gradient: string;
   }> = [
+    {
+      view: 'bills',
+      icon: <Receipt size={20} />,
+      label: 'Bills & Debts',
+      gradient: 'from-emerald-400 to-teal-600'
+    },
     {
       view: 'categories',
       icon: <Tags size={20} />,

@@ -7,16 +7,18 @@ import {
   getAllCategories,
   getAllRecurringRules,
   getAllWarranties,
+  getAllScheduledTransactions,
   getSetting,
   saveTransaction,
   saveAccount,
   saveCategory,
   saveRecurringRule,
   saveWarranty,
+  saveScheduledTransaction,
   saveSetting,
   clearAllData,
 } from './indexedDBService';
-import { Transaction, Account, Category, RecurringRule, WarrantyItem } from '../types';
+import { Transaction, Account, Category, RecurringRule, WarrantyItem, ScheduledTransaction } from '../types';
 
 interface BackupRow {
   type: string;
@@ -77,6 +79,16 @@ export async function exportToCSV(): Promise<string> {
     });
   }
 
+  // Export scheduled transactions
+  const scheduledTransactions = await getAllScheduledTransactions();
+  for (const scheduled of scheduledTransactions) {
+    rows.push({
+      type: 'scheduled_transaction',
+      id: scheduled.id,
+      data_json: JSON.stringify(scheduled),
+    });
+  }
+
   // Export settings
   const settingsKeys = ['baseCurrency', 'gradientStartColor', 'gradientEndColor', 'gradientAngle', 'biometricEnabled', 'autoBackupMonthly'];
   for (const key of settingsKeys) {
@@ -124,6 +136,18 @@ export async function exportReceiptsZip(): Promise<Blob> {
       const ext = mimeMatch ? mimeMatch[1].split('/')[1] : 'jpg';
 
       receiptsFolder.file(`warranty_${warranty.id}.${ext}`, base64Data, { base64: true });
+    }
+  }
+
+  // Export cheque images
+  const scheduledTransactions = await getAllScheduledTransactions();
+  for (const scheduled of scheduledTransactions) {
+    if (scheduled.chequeImage) {
+      const base64Data = scheduled.chequeImage.split(',')[1] || scheduled.chequeImage;
+      const mimeMatch = scheduled.chequeImage.match(/data:([^;]+);/);
+      const ext = mimeMatch ? mimeMatch[1].split('/')[1] : 'jpg';
+
+      receiptsFolder.file(`cheque_${scheduled.id}.${ext}`, base64Data, { base64: true });
     }
   }
 
@@ -314,6 +338,16 @@ export async function restoreFromBackup(csv: string, receiptsBlob: Blob): Promis
             warranty.receiptImage = receiptFiles[receiptKey];
           }
           await saveWarranty(warranty);
+          break;
+        }
+        case 'scheduled_transaction': {
+          const scheduled = data as ScheduledTransaction;
+          // Restore cheque image if exists
+          const chequeKey = `cheque_${scheduled.id}`;
+          if (receiptFiles[chequeKey]) {
+            scheduled.chequeImage = receiptFiles[chequeKey];
+          }
+          await saveScheduledTransaction(scheduled);
           break;
         }
         case 'setting':

@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
-import { X } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { X, Trash2, Upload, Camera, Image as ImageIcon } from 'lucide-react';
 import { ScheduledTransaction, TransactionType, Account, Category, RecurrencePattern } from '../types';
 
 interface ScheduledTransactionFormProps {
   onClose: () => void;
   onSave: (data: Partial<ScheduledTransaction>) => Promise<void>;
+  onDelete?: (id: string) => Promise<void>;
   accounts: Account[];
   categories: Category[];
   initialData?: ScheduledTransaction;
@@ -13,6 +14,7 @@ interface ScheduledTransactionFormProps {
 const ScheduledTransactionForm: React.FC<ScheduledTransactionFormProps> = ({
   onClose,
   onSave,
+  onDelete,
   accounts,
   categories,
   initialData,
@@ -28,7 +30,27 @@ const ScheduledTransactionForm: React.FC<ScheduledTransactionFormProps> = ({
   );
   const [recurrenceInterval, setRecurrenceInterval] = useState(initialData?.recurrenceInterval || 1);
   const [notes, setNotes] = useState(initialData?.notes || '');
+  const [chequeImage, setChequeImage] = useState(initialData?.chequeImage || '');
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const base64 = event.target?.result as string;
+      setChequeImage(base64);
+    };
+    reader.readAsDataURL(file);
+
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,6 +59,7 @@ const ScheduledTransactionForm: React.FC<ScheduledTransactionFormProps> = ({
     setSaving(true);
     try {
       await onSave({
+        ...(initialData?.id && { id: initialData.id }),
         merchant,
         amount: parseFloat(amount),
         currency: accounts.find(a => a.id === accountId)?.currency || 'USD',
@@ -48,6 +71,10 @@ const ScheduledTransactionForm: React.FC<ScheduledTransactionFormProps> = ({
         recurrenceInterval: recurrencePattern !== 'ONCE' ? recurrenceInterval : undefined,
         status: 'PENDING',
         notes,
+        chequeImage: chequeImage || undefined,
+        isCheque: initialData?.isCheque,
+        chequeNumber: initialData?.chequeNumber,
+        seriesId: initialData?.seriesId,
       });
       onClose();
     } catch (error) {
@@ -55,6 +82,27 @@ const ScheduledTransactionForm: React.FC<ScheduledTransactionFormProps> = ({
       alert('Failed to save scheduled transaction');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!initialData?.id) return;
+
+    const confirmed = window.confirm(
+      'Are you sure you want to delete this scheduled transaction?'
+    );
+
+    if (!confirmed) return;
+
+    setDeleting(true);
+    try {
+      await onDelete?.(initialData.id);
+      onClose();
+    } catch (error) {
+      console.error('Error deleting scheduled transaction:', error);
+      alert('Failed to delete scheduled transaction');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -107,6 +155,7 @@ const ScheduledTransactionForm: React.FC<ScheduledTransactionFormProps> = ({
             >
               <option value={TransactionType.EXPENSE}>Expense</option>
               <option value={TransactionType.INCOME}>Income</option>
+              <option value={TransactionType.OBLIGATION}>Obligation (Bills/Debts)</option>
             </select>
           </div>
 
@@ -193,22 +242,89 @@ const ScheduledTransactionForm: React.FC<ScheduledTransactionFormProps> = ({
             />
           </div>
 
-          <div className="flex gap-3 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg font-medium hover:bg-gray-50"
-              disabled={saving}
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="flex-1 px-4 py-2 bg-brand-500 text-white rounded-lg font-medium hover:bg-brand-600 disabled:opacity-50"
-              disabled={saving}
-            >
-              {saving ? 'Saving...' : initialData ? 'Update' : 'Create'}
-            </button>
+          {/* Cheque Image Upload */}
+          {initialData?.isCheque && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Cheque Image (optional)
+              </label>
+
+              {chequeImage ? (
+                <div className="relative">
+                  <img
+                    src={chequeImage}
+                    alt="Cheque"
+                    className="w-full rounded-lg border border-gray-300 mb-2"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="flex-1 bg-blue-500 text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-blue-600 flex items-center justify-center gap-2"
+                    >
+                      <Upload size={16} />
+                      Change Image
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setChequeImage('')}
+                      className="px-3 py-2 bg-red-500 text-white rounded-lg text-sm font-medium hover:bg-red-600"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="w-full bg-purple-500 text-white px-4 py-3 rounded-lg font-medium hover:bg-purple-600 flex items-center justify-center gap-2 border-2 border-dashed border-purple-300"
+                >
+                  <ImageIcon size={20} />
+                  Upload Cheque Image
+                </button>
+              )}
+
+              {/* Hidden File Input */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleFileUpload}
+                className="hidden"
+              />
+            </div>
+          )}
+
+          <div className="flex flex-col gap-3 pt-4">
+            {initialData && onDelete && (
+              <button
+                type="button"
+                onClick={handleDelete}
+                className="w-full px-4 py-2 bg-red-500 text-white rounded-lg font-medium hover:bg-red-600 disabled:opacity-50 flex items-center justify-center gap-2"
+                disabled={saving || deleting}
+              >
+                <Trash2 size={18} />
+                {deleting ? 'Deleting...' : 'Delete'}
+              </button>
+            )}
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg font-medium hover:bg-gray-50"
+                disabled={saving || deleting}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="flex-1 px-4 py-2 bg-brand-500 text-white rounded-lg font-medium hover:bg-brand-600 disabled:opacity-50"
+                disabled={saving || deleting}
+              >
+                {saving ? 'Saving...' : initialData ? 'Update' : 'Create'}
+              </button>
+            </div>
           </div>
         </form>
       </div>

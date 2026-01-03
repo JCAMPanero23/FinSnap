@@ -2,6 +2,7 @@ export enum TransactionType {
   EXPENSE = 'EXPENSE',
   INCOME = 'INCOME',
   TRANSFER = 'TRANSFER', // Added for specific styling if needed, though usually modeled as pair of EXPENSE/INCOME
+  OBLIGATION = 'OBLIGATION', // Bills, debts, loans - must-pay items for better cash flow tracking
 }
 
 export interface Category {

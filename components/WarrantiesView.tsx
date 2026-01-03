@@ -118,8 +118,8 @@ const WarrantiesView: React.FC<WarrantiesViewProps> = ({ settings, onUpdateSetti
 
   if (isEditing) {
     return (
-      <div className="h-full flex flex-col bg-slate-50 relative z-20">
-        <div className="bg-white px-6 py-4 border-b border-slate-100 flex justify-between items-center sticky top-0">
+      <div className="h-full flex flex-col relative z-20">
+        <div className="bg-white/80 backdrop-blur-md px-6 py-4 border-b border-white/30 flex justify-between items-center sticky top-0">
           <h2 className="text-xl font-bold text-slate-800">{editingItem.id ? 'Edit Warranty' : 'Add Warranty'}</h2>
           <button onClick={() => setIsEditing(false)} className="p-2 bg-slate-100 rounded-full text-slate-500 hover:bg-slate-200">
             <X size={20} />
@@ -244,7 +244,7 @@ const WarrantiesView: React.FC<WarrantiesViewProps> = ({ settings, onUpdateSetti
            </div>
         </div>
 
-        <div className="p-4 bg-white border-t border-slate-100 flex gap-3">
+        <div className="p-4 bg-white/90 backdrop-blur-md border-t border-white/20 flex gap-3">
           {editingItem.id && (
             <button 
               onClick={() => handleDelete(editingItem.id!)}
@@ -272,8 +272,8 @@ const WarrantiesView: React.FC<WarrantiesViewProps> = ({ settings, onUpdateSetti
   }
 
   return (
-    <div className="h-full flex flex-col pb-24 bg-slate-50">
-      <div className="px-6 py-4 bg-white border-b border-slate-100 sticky top-0 z-10">
+    <div className="h-full flex flex-col pb-24">
+      <div className="px-6 py-4 bg-white/80 backdrop-blur-md border-b border-white/30 sticky top-0 z-10">
          <div className="flex justify-between items-center mb-4">
             <h2 className="text-2xl font-bold text-slate-800">Warranties</h2>
             <button 
@@ -328,9 +328,9 @@ const WarrantiesView: React.FC<WarrantiesViewProps> = ({ settings, onUpdateSetti
            const StatusIcon = status.icon;
 
            return (
-             <div 
-               key={item.id} 
-               className="bg-white rounded-xl p-4 shadow-sm border border-slate-100 relative overflow-hidden group hover:shadow-md transition-shadow"
+             <div
+               key={item.id}
+               className="bg-white/80 backdrop-blur-md rounded-xl p-4 shadow-sm border border-white/30 relative overflow-hidden group hover:shadow-md transition-shadow"
              >
                 <div className="flex gap-4 cursor-pointer" onClick={() => { setEditingItem(item); setIsEditing(true); }}>
                    {/* Thumbnail */}

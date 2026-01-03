@@ -136,20 +136,20 @@ const PlanningView: React.FC<PlanningViewProps> = ({ settings, onUpdateSettings,
   };
 
   return (
-    <div className="h-full flex flex-col pb-24 bg-slate-50">
+    <div className="h-full flex flex-col pb-24">
       {/* Tabs */}
-      <div className="px-6 py-4 bg-white border-b border-slate-100 sticky top-0 z-10">
+      <div className="px-6 py-4 bg-white/80 backdrop-blur-md border-b border-white/30 sticky top-0 z-10">
          <h2 className="text-2xl font-bold text-slate-800 mb-4">Planning</h2>
-         <div className="flex p-1 bg-slate-100 rounded-xl">
-           <button 
+         <div className="flex p-1 bg-white/40 backdrop-blur-sm rounded-xl">
+           <button
              onClick={() => setActiveTab('bills')}
-             className={`flex-1 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all ${activeTab === 'bills' ? 'bg-white shadow text-brand-600' : 'text-slate-500'}`}
+             className={`flex-1 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all ${activeTab === 'bills' ? 'bg-white/90 shadow text-brand-600' : 'text-slate-600'}`}
            >
              <Calendar size={16} /> Bills & Rules
            </button>
-           <button 
+           <button
              onClick={() => setActiveTab('savings')}
-             className={`flex-1 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all ${activeTab === 'savings' ? 'bg-white shadow text-brand-600' : 'text-slate-500'}`}
+             className={`flex-1 py-2 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-all ${activeTab === 'savings' ? 'bg-white/90 shadow text-brand-600' : 'text-slate-600'}`}
            >
              <PiggyBank size={16} /> Savings
            </button>
@@ -166,9 +166,9 @@ const PlanningView: React.FC<PlanningViewProps> = ({ settings, onUpdateSettings,
                <p>These rules help parse your SMS. Set a "Due Day" to see them as upcoming bills here. They won't auto-add to expenses until parsed or manually added.</p>
             </div>
 
-            <button 
+            <button
                onClick={() => setEditingRule({ merchantKeyword: '', type: TransactionType.EXPENSE })}
-               className="w-full py-3 bg-white border-2 border-dashed border-slate-200 rounded-xl text-slate-400 font-bold text-sm flex items-center justify-center gap-2 hover:border-brand-300 hover:text-brand-600 transition-all"
+               className="w-full py-3 bg-white/60 backdrop-blur-sm border-2 border-dashed border-white/40 rounded-xl text-slate-600 font-bold text-sm flex items-center justify-center gap-2 hover:border-brand-300 hover:text-brand-600 hover:bg-white/80 transition-all"
             >
                <Plus size={18} /> Add Recurring Bill / Rule
             </button>
@@ -177,9 +177,9 @@ const PlanningView: React.FC<PlanningViewProps> = ({ settings, onUpdateSettings,
               {settings.recurringRules.map(rule => {
                  const nextDate = getNextDueDate(rule.dueDay);
                  const daysLeft = nextDate ? getDaysUntil(nextDate) : null;
-                 
+
                  return (
-                   <div key={rule.id} onClick={() => setEditingRule(rule)} className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 active:scale-[0.99] transition-transform cursor-pointer">
+                   <div key={rule.id} onClick={() => setEditingRule(rule)} className="bg-white/80 backdrop-blur-md p-4 rounded-xl shadow-sm border border-white/40 active:scale-[0.99] transition-transform cursor-pointer">
                       <div className="flex justify-between items-start mb-2">
                          <div className="flex items-center gap-3">
                             <div className={`p-2 rounded-lg ${rule.type === TransactionType.TRANSFER ? 'bg-purple-50 text-purple-500' : 'bg-orange-50 text-orange-500'}`}>
@@ -228,9 +228,9 @@ const PlanningView: React.FC<PlanningViewProps> = ({ settings, onUpdateSettings,
                 </div>
              </div>
 
-             <button 
+             <button
                onClick={() => setEditingGoal({ name: '', targetAmount: 1000, currentAmount: 0 })}
-               className="w-full py-3 bg-white border-2 border-dashed border-slate-200 rounded-xl text-slate-400 font-bold text-sm flex items-center justify-center gap-2 hover:border-emerald-300 hover:text-emerald-600 transition-all"
+               className="w-full py-3 bg-white/60 backdrop-blur-sm border-2 border-dashed border-white/30 rounded-xl text-slate-600 font-bold text-sm flex items-center justify-center gap-2 hover:bg-white/80 hover:border-emerald-300 hover:text-emerald-600 transition-all"
             >
                <Plus size={18} /> New Savings Goal
             </button>
@@ -240,7 +240,7 @@ const PlanningView: React.FC<PlanningViewProps> = ({ settings, onUpdateSettings,
                  const progress = Math.min(100, (goal.currentAmount / goal.targetAmount) * 100);
                  
                  return (
-                   <div key={goal.id} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden">
+                   <div key={goal.id} className="bg-white/80 backdrop-blur-md p-5 rounded-2xl shadow-sm border border-white/30 relative overflow-hidden">
                       <div className="flex justify-between items-start mb-3">
                          <div onClick={() => setEditingGoal(goal)} className="cursor-pointer">
                             <h3 className="font-bold text-slate-800 text-lg flex items-center gap-2">
@@ -289,7 +289,7 @@ const PlanningView: React.FC<PlanningViewProps> = ({ settings, onUpdateSettings,
       {/* Edit Rule Modal */}
       {editingRule && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm sm:overflow-hidden">
-           <div className="bg-white w-full max-w-md rounded-2xl shadow-xl animate-in slide-in-from-bottom-10 flex flex-col max-h-[85vh]">
+           <div className="bg-white/95 backdrop-blur-md w-full max-w-md rounded-2xl shadow-xl animate-in slide-in-from-bottom-10 flex flex-col max-h-[85vh]">
               
               <div className="flex justify-between items-center p-4 border-b border-slate-100">
                  <h3 className="font-bold text-lg">{editingRule.id ? 'Edit Bill / Rule' : 'New Recurring Bill'}</h3>
@@ -354,7 +354,7 @@ const PlanningView: React.FC<PlanningViewProps> = ({ settings, onUpdateSettings,
               </div>
 
               {/* Fixed Bottom Action Bar */}
-              <div className="p-4 border-t border-slate-100 bg-white flex gap-3">
+              <div className="p-4 border-t border-white/20 bg-white/90 backdrop-blur-md flex gap-3">
                     {editingRule.id && (
                       <button onClick={() => { handleDeleteRule(editingRule.id!); setEditingRule(null); }} className="p-3 bg-red-50 text-red-500 rounded-xl">
                         <Trash2 size={20} />
@@ -371,7 +371,7 @@ const PlanningView: React.FC<PlanningViewProps> = ({ settings, onUpdateSettings,
       {/* Edit Goal Modal */}
       {editingGoal && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
-           <div className="bg-white w-full max-w-md rounded-2xl p-5 shadow-xl animate-in slide-in-from-bottom-10">
+           <div className="bg-white/95 backdrop-blur-md w-full max-w-md rounded-2xl p-5 shadow-xl animate-in slide-in-from-bottom-10">
               <div className="flex justify-between items-center mb-4 border-b border-slate-100 pb-3">
                  <h3 className="font-bold text-lg">{editingGoal.id ? 'Edit Goal' : 'New Goal'}</h3>
                  <button onClick={() => setEditingGoal(null)}><X size={20} className="text-slate-400" /></button>
@@ -441,7 +441,7 @@ const PlanningView: React.FC<PlanningViewProps> = ({ settings, onUpdateSettings,
       {/* Deposit Modal */}
       {depositGoalId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-xs rounded-2xl p-6 shadow-2xl animate-in zoom-in-95">
+          <div className="bg-white/95 backdrop-blur-md w-full max-w-xs rounded-2xl p-6 shadow-2xl animate-in zoom-in-95">
              <h3 className="text-center font-bold text-slate-800 mb-4">Add to Savings</h3>
              <div className="relative mb-6">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xl">$</span>

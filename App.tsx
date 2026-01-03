@@ -47,6 +47,7 @@ import {
 import {
   createScheduledTransaction,
   updateScheduledTransaction,
+  deleteScheduledTransaction,
   markAsPaid,
   markAsSkipped,
 } from './services/scheduledTransactionsService';
@@ -98,6 +99,7 @@ const App: React.FC = () => {
   const [migrating, setMigrating] = useState(false);
   const [scheduledTransactions, setScheduledTransactions] = useState<ScheduledTransaction[]>([]);
   const [showScheduledForm, setShowScheduledForm] = useState(false);
+  const [editingScheduled, setEditingScheduled] = useState<ScheduledTransaction | null>(null);
   const [showBatchChequeCreator, setShowBatchChequeCreator] = useState(false);
   const [matchingCandidate, setMatchingCandidate] = useState<{
     transaction: Transaction;
@@ -578,11 +580,30 @@ const App: React.FC = () => {
 
   const handleCreateScheduledTransaction = async (data: Partial<ScheduledTransaction>) => {
     try {
-      await createScheduledTransaction(data as any);
+      if (data.id) {
+        // Update existing
+        await updateScheduledTransaction(data.id, data as any);
+      } else {
+        // Create new
+        await createScheduledTransaction(data as any);
+      }
       await loadUserData();
       setShowScheduledForm(false);
+      setEditingScheduled(null);
     } catch (error) {
-      console.error('Error creating scheduled transaction:', error);
+      console.error('Error saving scheduled transaction:', error);
+      throw error;
+    }
+  };
+
+  const handleDeleteScheduledTransaction = async (id: string) => {
+    try {
+      await deleteScheduledTransaction(id);
+      await loadUserData();
+      setShowScheduledForm(false);
+      setEditingScheduled(null);
+    } catch (error) {
+      console.error('Error deleting scheduled transaction:', error);
       throw error;
     }
   };
@@ -711,6 +732,7 @@ const App: React.FC = () => {
           <Dashboard
             transactions={filteredTransactions}
             accounts={settings.accounts}
+            scheduledTransactions={scheduledTransactions}
             baseCurrency={settings.baseCurrency}
             dateFilter={dateFilter}
             onDateFilterChange={handleDateFilterChange}
@@ -783,7 +805,12 @@ const App: React.FC = () => {
         return (
           <CalendarView
             transactions={transactions}
+            scheduledTransactions={scheduledTransactions}
             onSelectTransaction={handleEditTransaction}
+            onSelectScheduledTransaction={(st) => {
+              setEditingScheduled(st);
+              setShowScheduledForm(true);
+            }}
           />
         );
       case 'planning':
@@ -822,14 +849,17 @@ const App: React.FC = () => {
         return (
           <BillsDebtsView
             accounts={settings.accounts}
+            scheduledTransactions={scheduledTransactions}
+            transactions={transactions}
             onCreateScheduled={() => setShowScheduledForm(true)}
             onCreateBatchCheques={() => setShowBatchChequeCreator(true)}
             onMarkPaid={handleMarkPaid}
             onSkip={handleSkipScheduled}
             onViewScheduled={(st) => {
-              // Open details modal (can be implemented later)
-              console.log('View scheduled transaction:', st);
+              setEditingScheduled(st);
+              setShowScheduledForm(true);
             }}
+            onViewTransaction={(tx) => setEditingTransaction(tx)}
           />
         );
       case 'settings':
@@ -846,6 +876,7 @@ const App: React.FC = () => {
           <Dashboard
             transactions={transactions}
             accounts={settings.accounts}
+            scheduledTransactions={scheduledTransactions}
             baseCurrency={settings.baseCurrency}
             dateFilter={dateFilter}
             onDateFilterChange={handleDateFilterChange}
@@ -973,10 +1004,15 @@ const App: React.FC = () => {
       {/* Scheduled Transaction Form */}
       {showScheduledForm && (
         <ScheduledTransactionForm
-          onClose={() => setShowScheduledForm(false)}
+          onClose={() => {
+            setShowScheduledForm(false);
+            setEditingScheduled(null);
+          }}
           onSave={handleCreateScheduledTransaction}
+          onDelete={handleDeleteScheduledTransaction}
           accounts={settings.accounts}
           categories={settings.categories}
+          initialData={editingScheduled || undefined}
         />
       )}
 
@@ -990,8 +1026,8 @@ const App: React.FC = () => {
         />
       )}
 
-      {/* Bottom Tabs Navigation (Only show if NOT in Add or Settings mode) */}
-      {currentView !== 'add' && currentView !== 'settings' && (
+      {/* Bottom Tabs Navigation (Only show if NOT in Settings mode) */}
+      {currentView !== 'settings' && (
         <BottomTabs
           currentView={currentView}
           onNavigate={setCurrentView}

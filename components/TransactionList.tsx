@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Transaction, TransactionType, Account } from '../types';
-import { Search, TrendingDown, TrendingUp, Filter, Pencil, CreditCard, Clock, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, TrendingDown, TrendingUp, Filter, Pencil, CreditCard, Clock, X, ChevronLeft, ChevronRight, Receipt } from 'lucide-react';
 import SplitTransactionsModal from './SplitTransactionsModal';
 
 interface TransactionListProps {
@@ -42,7 +42,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
   currentPeriodLabel
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [filter, setFilter] = useState<'ALL' | 'INCOME' | 'CASH' | 'CREDIT'>('ALL');
+  const [filter, setFilter] = useState<'ALL' | 'INCOME' | 'CASH' | 'CREDIT' | 'OBLIGATION'>('ALL');
   const [viewingSplitGroup, setViewingSplitGroup] = useState<string | null>(null);
 
   // Date Filter Type Navigation
@@ -79,6 +79,8 @@ const TransactionList: React.FC<TransactionListProps> = ({
         let matchesFilter = true;
         if (filter === 'INCOME') {
           matchesFilter = t.type === TransactionType.INCOME;
+        } else if (filter === 'OBLIGATION') {
+          matchesFilter = t.type === TransactionType.OBLIGATION;
         } else if (filter === 'CASH') {
           // Cash payments: expenses from non-credit card accounts
           const account = accounts.find(a => a.id === t.accountId);
@@ -248,13 +250,14 @@ const TransactionList: React.FC<TransactionListProps> = ({
           <Filter size={14} className="text-slate-400" />
           <select
             value={filter}
-            onChange={(e) => setFilter(e.target.value as 'ALL' | 'INCOME' | 'CASH' | 'CREDIT')}
+            onChange={(e) => setFilter(e.target.value as 'ALL' | 'INCOME' | 'CASH' | 'CREDIT' | 'OBLIGATION')}
             className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-500 appearance-none"
           >
             <option value="ALL">All Transactions</option>
             <option value="CASH">Cash Payments</option>
             <option value="CREDIT">Credit Card</option>
             <option value="INCOME">Income Only</option>
+            <option value="OBLIGATION">Obligations (Bills/Debts)</option>
           </select>
         </div>
 
@@ -286,9 +289,13 @@ const TransactionList: React.FC<TransactionListProps> = ({
                       {/* Left Side: Icon + Text (Allows shrinking) */}
                       <div className="flex items-center gap-3 flex-1 min-w-0">
                         <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
-                          t.type === TransactionType.EXPENSE ? 'bg-red-50 text-red-500' : 'bg-green-50 text-green-500'
+                          t.type === TransactionType.INCOME ? 'bg-green-50 text-green-500' :
+                          t.type === TransactionType.OBLIGATION ? 'bg-orange-50 text-orange-500' :
+                          'bg-red-50 text-red-500'
                         }`}>
-                          {t.type === TransactionType.EXPENSE ? <TrendingDown size={18} /> : <TrendingUp size={18} />}
+                          {t.type === TransactionType.INCOME ? <TrendingUp size={18} /> :
+                           t.type === TransactionType.OBLIGATION ? <Receipt size={18} /> :
+                           <TrendingDown size={18} />}
                         </div>
                         <div className="flex-1 min-w-0 overflow-hidden">
                           <div className="font-semibold text-slate-800 truncate" title={t.merchant}>{t.merchant}</div>
@@ -327,9 +334,11 @@ const TransactionList: React.FC<TransactionListProps> = ({
                       <div className="flex items-center gap-3 pl-2 shrink-0">
                         <div className="text-right">
                            <div className={`font-bold whitespace-nowrap ${
-                             t.type === TransactionType.EXPENSE ? 'text-slate-800' : 'text-green-600'
+                             t.type === TransactionType.INCOME ? 'text-green-600' :
+                             t.type === TransactionType.OBLIGATION ? 'text-orange-600' :
+                             'text-slate-800'
                            }`}>
-                             {t.type === TransactionType.EXPENSE ? '-' : '+'}{t.amount.toFixed(2)}
+                             {t.type === TransactionType.INCOME ? '+' : '-'}{t.amount.toFixed(2)}
                            </div>
                            <div className="text-[10px] text-slate-400 font-medium uppercase">{t.currency}</div>
                         </div>

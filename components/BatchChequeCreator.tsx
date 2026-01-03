@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, Camera, Upload } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { X, Camera, Upload, Image } from 'lucide-react';
 import { Account, Category } from '../types';
 import { previewChequeDates } from '../services/batchChequeService';
 import LiveScanner from './LiveScanner';
@@ -42,6 +42,7 @@ const BatchChequeCreator: React.FC<BatchChequeCreatorProps> = ({
   const [showScanner, setShowScanner] = useState(false);
   const [scanningIndex, setScanningIndex] = useState(0);
   const [saving, setSaving] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Preview dates
   const previewDates = firstChequeDate
@@ -49,15 +50,61 @@ const BatchChequeCreator: React.FC<BatchChequeCreatorProps> = ({
     : [];
 
   const handleScanCheque = (imageData: string) => {
-    const newImages = [...chequeImages];
-    newImages[scanningIndex] = imageData;
-    setChequeImages(newImages);
+    setChequeImages(prev => {
+      const newImages = [...prev];
+      // Find next empty slot or use scanningIndex
+      let targetIndex = scanningIndex;
+      if (newImages[targetIndex]) {
+        // If current slot is filled, find next empty slot
+        targetIndex = newImages.findIndex((img, idx) => !img && idx < numberOfCheques);
+        if (targetIndex === -1) targetIndex = scanningIndex;
+      }
+      newImages[targetIndex] = imageData;
+      return newImages;
+    });
     setShowScanner(false);
 
-    // Auto-advance to next cheque if not done
-    if (scanningIndex < numberOfCheques - 1) {
-      setScanningIndex(scanningIndex + 1);
-      setShowScanner(true);
+    // Auto-advance to next empty slot
+    const nextIndex = scanningIndex + 1;
+    if (nextIndex < numberOfCheques) {
+      setScanningIndex(nextIndex);
+    }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const newImages = [...chequeImages];
+    let currentIndex = 0;
+
+    for (let i = 0; i < Math.min(files.length, numberOfCheques); i++) {
+      const file = files[i];
+
+      // Convert to base64
+      const reader = new FileReader();
+      await new Promise<void>((resolve) => {
+        reader.onload = (event) => {
+          const base64 = event.target?.result as string;
+          // Find next empty slot
+          while (currentIndex < numberOfCheques && newImages[currentIndex]) {
+            currentIndex++;
+          }
+          if (currentIndex < numberOfCheques) {
+            newImages[currentIndex] = base64;
+            currentIndex++;
+          }
+          resolve();
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    setChequeImages(newImages);
+
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
     }
   };
 
@@ -269,22 +316,61 @@ const BatchChequeCreator: React.FC<BatchChequeCreatorProps> = ({
           {/* Cheque Images */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Cheque Images (optional)
+              Cheque Images (optional) - {chequeImages.filter(img => img).length}/{numberOfCheques} uploaded
             </label>
-            <button
-              type="button"
-              onClick={() => {
-                setScanningIndex(0);
-                setShowScanner(true);
-              }}
-              className="w-full bg-purple-500 text-white px-4 py-2 rounded-lg font-medium hover:bg-purple-600 flex items-center justify-center gap-2"
-            >
-              <Camera size={20} />
-              Scan Cheques ({chequeImages.filter(img => img).length}/{numberOfCheques})
-            </button>
+
+            <div className="grid grid-cols-2 gap-2">
+              {/* Take Photo Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  // Find first empty slot
+                  const emptyIndex = chequeImages.findIndex((img, idx) => !img && idx < numberOfCheques);
+                  setScanningIndex(emptyIndex !== -1 ? emptyIndex : 0);
+                  setShowScanner(true);
+                }}
+                className="bg-purple-500 text-white px-4 py-2 rounded-lg font-medium hover:bg-purple-600 flex items-center justify-center gap-2"
+              >
+                <Camera size={18} />
+                Take Photo
+              </button>
+
+              {/* Upload Files Button */}
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="bg-blue-500 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-600 flex items-center justify-center gap-2"
+              >
+                <Image size={18} />
+                Upload Files
+              </button>
+            </div>
+
+            {/* Hidden File Input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={handleFileUpload}
+              className="hidden"
+            />
+
+            {/* Upload Status */}
             {chequeImages.filter(img => img).length > 0 && (
-              <div className="mt-2 text-sm text-green-600">
-                ✓ {chequeImages.filter(img => img).length} cheque(s) scanned
+              <div className="mt-2 flex flex-wrap gap-1">
+                {Array.from({ length: numberOfCheques }).map((_, idx) => (
+                  <div
+                    key={idx}
+                    className={`w-8 h-8 rounded border-2 flex items-center justify-center text-xs font-bold ${
+                      chequeImages[idx]
+                        ? 'bg-green-100 border-green-500 text-green-700'
+                        : 'bg-gray-100 border-gray-300 text-gray-400'
+                    }`}
+                  >
+                    {idx + 1}
+                  </div>
+                ))}
               </div>
             )}
           </div>
