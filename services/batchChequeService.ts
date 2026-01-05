@@ -126,3 +126,41 @@ export function previewChequeDates(
   }
   return dates;
 }
+
+/**
+ * Add a single cheque to an existing series
+ */
+export async function addChequeToSeries(
+  seriesId: string,
+  existingCheque: ScheduledTransaction,
+  newChequeData: {
+    dueDate: string;
+    amount: number;
+    chequeNumber?: string;
+    chequeImage?: string;
+  }
+): Promise<ScheduledTransaction> {
+  // Validate date format
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(newChequeData.dueDate)) {
+    throw new Error('dueDate must be in YYYY-MM-DD format');
+  }
+
+  // Create a new cheque based on the existing series template
+  const newCheque = await createScheduledTransaction({
+    merchant: existingCheque.merchant,
+    amount: newChequeData.amount,
+    currency: existingCheque.currency,
+    category: existingCheque.category,
+    type: existingCheque.type,
+    accountId: existingCheque.accountId,
+    dueDate: newChequeData.dueDate,
+    recurrencePattern: 'ONCE',
+    isCheque: true,
+    chequeNumber: newChequeData.chequeNumber,
+    chequeImage: newChequeData.chequeImage,
+    seriesId,
+    notes: existingCheque.notes ? `${existingCheque.notes} (added manually)` : 'Added to series',
+  });
+
+  return newCheque;
+}

@@ -6,6 +6,7 @@ import { updateOverdueStatus, getByStatus, getUpcoming } from '../services/sched
 import ChequeSeriesModal from './ChequeSeriesModal';
 import InsufficientFundsWarning from './InsufficientFundsWarning';
 import { getAllInsufficientFundsWarnings } from '../services/insufficientFundsService';
+import { addChequeToSeries } from '../services/batchChequeService';
 
 interface BillsDebtsViewProps {
   accounts: Account[];
@@ -367,6 +368,28 @@ const BillsDebtsView: React.FC<BillsDebtsViewProps> = ({
           onEditCheque={(cheque) => {
             setSelectedSeries(null);
             onViewScheduled(cheque);
+          }}
+          onAddCheque={async (data) => {
+            // Add a new cheque to the series
+            const seriesId = selectedSeries[0]?.seriesId;
+            if (!seriesId) {
+              throw new Error('No series ID found');
+            }
+
+            // Use the first cheque as a template
+            const template = selectedSeries[0];
+            await addChequeToSeries(seriesId, template, data);
+
+            // Reload the series
+            const allScheduled = await getAllScheduledTransactions();
+            const updatedSeries = allScheduled.filter((st) => st.seriesId === seriesId);
+            setSelectedSeries(updatedSeries);
+
+            // Also trigger a refresh by reloading the view
+            const overdue = await getByStatus('OVERDUE');
+            setOverdueItems(overdue);
+            const upcoming = await getUpcoming(30);
+            setUpcomingItems(upcoming);
           }}
         />
       )}
