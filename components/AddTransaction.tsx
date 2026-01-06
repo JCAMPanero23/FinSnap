@@ -12,9 +12,10 @@ interface AddTransactionProps {
   onCancel: () => void;
   settings: AppSettings;
   existingTransactions: Transaction[];
+  onAddRule?: (merchantKeyword: string, category: string, type: TransactionType) => void;
 }
 
-const AddTransaction: React.FC<AddTransactionProps> = ({ onAdd, onCancel, settings, existingTransactions }) => {
+const AddTransaction: React.FC<AddTransactionProps> = ({ onAdd, onCancel, settings, existingTransactions, onAddRule }) => {
   const [mode, setMode] = useState<'ai' | 'manual'>('ai');
   
   // AI Mode State
@@ -24,9 +25,11 @@ const AddTransaction: React.FC<AddTransactionProps> = ({ onAdd, onCancel, settin
   const [error, setError] = useState<string | null>(null);
   const [selectedImage, setSelectedImage] = useState<{data: string, mimeType: string} | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [receiptImage, setReceiptImage] = useState<string | null>(null);
-  const [keepReceipt, setKeepReceipt] = useState(false);
-  const receiptFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Review Mode State
+  const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
+  const [transactionReceipts, setTransactionReceipts] = useState<Map<string, {data: string, keep: boolean}>>(new Map());
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
 
   // Cheque Matching State
   const [chequeMatchResults, setChequeMatchResults] = useState<Map<string, ChequeMatchResult>>(new Map());
@@ -98,9 +101,7 @@ const AddTransaction: React.FC<AddTransactionProps> = ({ onAdd, onCancel, settin
           const transaction: Transaction = {
             ...r,
             id: txId,
-            accountId: mappedAccountId,
-            receiptImage: receiptImage || undefined,
-            keepReceipt: keepReceipt || undefined
+            accountId: mappedAccountId
           };
 
           // Step 2: If this is a cheque, check for match and update status
@@ -185,22 +186,18 @@ const AddTransaction: React.FC<AddTransactionProps> = ({ onAdd, onCancel, settin
     }
   };
 
-  const handleReceiptUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setReceiptImage(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
   const handleConfirmPreview = () => {
     if (previewData) {
-      onAdd(previewData);
-      setReceiptImage(null);
-      setKeepReceipt(false);
+      // Merge receipt images into transactions before submitting
+      const transactionsWithReceipts = previewData.map(tx => {
+        const receipt = transactionReceipts.get(tx.id);
+        if (receipt) {
+          return { ...tx, receiptImage: receipt.data, keepReceipt: receipt.keep };
+        }
+        return tx;
+      });
+      onAdd(transactionsWithReceipts);
+      setTransactionReceipts(new Map());
     }
   };
 
@@ -240,8 +237,9 @@ const AddTransaction: React.FC<AddTransactionProps> = ({ onAdd, onCancel, settin
 
   // --- SPLIT HANDLERS ---
   const handleSplitTransaction = async (transaction: Transaction) => {
-    // Check if receipt image exists
-    if (!transaction.receiptImage && !receiptImage) {
+    // Check if receipt image exists (from map or already attached)
+    const receipt = transactionReceipts.get(transaction.id);
+    if (!transaction.receiptImage && !receipt) {
       alert('Please upload a receipt image first');
       return;
     }
@@ -250,7 +248,7 @@ const AddTransaction: React.FC<AddTransactionProps> = ({ onAdd, onCancel, settin
     setIsSplitLoading(true);
 
     try {
-      const imageToUse = transaction.receiptImage || receiptImage;
+      const imageToUse = transaction.receiptImage || receipt?.data;
       const [mimeType, base64Data] = imageToUse!.split(',');
       const cleanMimeType = mimeType.match(/:(.*?);/)?.[1] || 'image/jpeg';
 
@@ -275,6 +273,7 @@ const AddTransaction: React.FC<AddTransactionProps> = ({ onAdd, onCancel, settin
 
     const groupId = uuidv4();
     const splitTransactions: Transaction[] = [];
+    const receipt = transactionReceipts.get(splittingTransaction.id);
 
     groups.forEach((group) => {
       const groupAmount = group.items.reduce((sum, item) => sum + item.amount, 0);
@@ -287,7 +286,7 @@ const AddTransaction: React.FC<AddTransactionProps> = ({ onAdd, onCancel, settin
         amount: groupAmount,
         merchant: `${splittingTransaction.merchant} - ${groupDescription}`,
         category: group.category,
-        receiptImage: splittingTransaction.receiptImage || receiptImage,
+        receiptImage: splittingTransaction.receiptImage || receipt?.data,
       });
     });
 
@@ -299,6 +298,88 @@ const AddTransaction: React.FC<AddTransactionProps> = ({ onAdd, onCancel, settin
 
     setSplittingTransaction(null);
     setSplitLineItems(null);
+  };
+
+  // --- REVIEW MODE HANDLERS ---
+  const handleEditTransaction = (transaction: Transaction) => {
+    if (editingTransactionId === transaction.id) {
+      // If already editing, save changes
+      handleSaveInlineEdit();
+    } else {
+      // Start editing this transaction
+      setEditingTransactionId(transaction.id);
+      setEditingTransaction({ ...transaction });
+    }
+  };
+
+  const handleSaveInlineEdit = () => {
+    if (editingTransaction && editingTransactionId && previewData) {
+      const updated = previewData.map(tx =>
+        tx.id === editingTransactionId ? editingTransaction : tx
+      );
+      setPreviewData(updated);
+      setEditingTransactionId(null);
+      setEditingTransaction(null);
+    }
+  };
+
+  const handleCancelInlineEdit = () => {
+    setEditingTransactionId(null);
+    setEditingTransaction(null);
+  };
+
+  const handleInlineFieldChange = (field: keyof Transaction, value: any) => {
+    if (editingTransaction) {
+      setEditingTransaction({ ...editingTransaction, [field]: value });
+    }
+  };
+
+  const handleReceiptUploadForTransaction = (transactionId: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const newReceipts = new Map(transactionReceipts);
+        newReceipts.set(transactionId, { data: reader.result as string, keep: false });
+        setTransactionReceipts(newReceipts);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleToggleKeepReceipt = (transactionId: string) => {
+    const receipt = transactionReceipts.get(transactionId);
+    if (receipt) {
+      const newReceipts = new Map(transactionReceipts);
+      newReceipts.set(transactionId, { ...receipt, keep: !receipt.keep });
+      setTransactionReceipts(newReceipts);
+    }
+  };
+
+  const handleRemoveReceipt = (transactionId: string) => {
+    const newReceipts = new Map(transactionReceipts);
+    newReceipts.delete(transactionId);
+    setTransactionReceipts(newReceipts);
+  };
+
+  const handleCreateRule = (transaction: Transaction) => {
+    if (window.confirm(`Create recurring rule for "${transaction.merchant}"?\n\nCategory: ${transaction.category}\nType: ${transaction.type}`)) {
+      if (onAddRule) {
+        onAddRule(transaction.merchant, transaction.category, transaction.type);
+        alert(`Rule created successfully! Future transactions from "${transaction.merchant}" will be categorized as ${transaction.category}.`);
+      } else {
+        alert('Rule creation not available. Please update from Settings.');
+      }
+    }
+  };
+
+  const handleOpenFullEdit = (transaction: Transaction) => {
+    // Save any pending inline edits first
+    if (editingTransactionId === transaction.id) {
+      handleSaveInlineEdit();
+    }
+    // Open EditTransactionModal (will implement modal integration next)
+    setEditingTransaction(transaction);
   };
 
   if (previewData) {
@@ -317,131 +398,326 @@ const AddTransaction: React.FC<AddTransactionProps> = ({ onAdd, onCancel, settin
                <button onClick={() => setPreviewData(null)} className="block mx-auto mt-4 text-brand-600 font-medium">Try again</button>
              </div>
            )}
-           {previewData.map((t) => (
-            <div key={t.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 relative group">
-              <button 
-                onClick={() => handleRemovePreviewItem(t.id)}
-                className="absolute top-2 right-2 p-1 text-slate-300 hover:text-red-500 transition-colors"
+           {previewData.map((t) => {
+             const isEditing = editingTransactionId === t.id;
+             const txData = isEditing && editingTransaction ? editingTransaction : t;
+             const receipt = transactionReceipts.get(t.id);
+
+             return (
+            <div
+              key={t.id}
+              onClick={() => !isEditing && handleEditTransaction(t)}
+              className={`bg-white p-4 rounded-xl shadow-sm border-2 relative group transition-all cursor-pointer ${
+                isEditing ? 'border-brand-500 ring-2 ring-brand-200' : 'border-slate-200 hover:border-brand-300'
+              }`}
+            >
+              <button
+                onClick={(e) => { e.stopPropagation(); handleRemovePreviewItem(t.id); }}
+                className="absolute top-2 right-2 p-1 text-slate-300 hover:text-red-500 transition-colors z-10"
               >
                 <X size={18} />
               </button>
-              <div className="flex justify-between items-start mb-2">
-                <div>
-                  <div className="font-bold text-slate-800 text-lg">{t.merchant}</div>
-                  <div className="text-xs text-slate-500 uppercase tracking-wide font-semibold mt-1">{t.category}</div>
-                </div>
-                <div className={`font-bold text-lg ${
-                  t.type === TransactionType.INCOME ? 'text-green-600' :
-                  t.type === TransactionType.OBLIGATION ? 'text-orange-600' :
-                  'text-slate-800'
-                }`}>
-                  {t.type === TransactionType.INCOME ? '+' : '-'}{t.currency} {t.amount.toFixed(2)}
-                </div>
-              </div>
-              <div className="text-xs text-slate-400 flex flex-col gap-1">
-                <div className="flex items-center gap-2">
-                  <span>{t.date}</span>
-                  {t.account && <span className="bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded font-mono">{t.account}</span>}
-                </div>
-                {t.isTransfer && <span className="text-brand-600 font-bold">Transfer</span>}
-                {t.originalAmount && t.originalAmount !== t.amount && (
-                  <div className="text-slate-500 italic">
-                    Converted from {t.originalCurrency} {t.originalAmount.toFixed(2)}
+
+              {/* EDIT MODE */}
+              {isEditing ? (
+                <div className="space-y-3" onClick={(e) => e.stopPropagation()}>
+                  {/* Amount */}
+                  <div>
+                    <label className="text-xs font-semibold text-slate-600 mb-1 block">Amount</label>
+                    <div className="flex gap-2 items-center">
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={txData.amount}
+                        onChange={(e) => handleInlineFieldChange('amount', parseFloat(e.target.value) || 0)}
+                        className="flex-1 px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-lg font-bold focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                      />
+                      <span className="text-slate-600 font-semibold">{txData.currency}</span>
+                    </div>
                   </div>
-                )}
-                {t.rawText && <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-500 truncate max-w-[250px]">Src: "{t.rawText}"</span>}
 
-                {/* Cheque Status Indicator */}
-                {t.isCheque && (
-                  <div className="mt-2 pt-2 border-t border-slate-100">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="bg-purple-50 text-purple-700 px-2 py-1 rounded-md font-semibold flex items-center gap-1.5">
-                        📝 Cheque #{t.chequeNumber}
-                      </span>
-                      {t.chequeStatus === 'CLEARED' ? (
-                        <span className="bg-green-50 text-green-700 px-2 py-1 rounded-md font-semibold flex items-center gap-1.5">
-                          <CheckCircle2 size={14} />
-                          Matched
-                        </span>
-                      ) : (
-                        <span className="bg-amber-50 text-amber-700 px-2 py-1 rounded-md font-semibold flex items-center gap-1.5">
-                          <AlertCircle size={14} />
-                          Pending
-                        </span>
-                      )}
+                  {/* Merchant */}
+                  <div>
+                    <label className="text-xs font-semibold text-slate-600 mb-1 block">Merchant</label>
+                    <input
+                      type="text"
+                      value={txData.merchant}
+                      onChange={(e) => handleInlineFieldChange('merchant', e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                    />
+                  </div>
 
-                      {/* Match Confidence Badge */}
-                      {chequeMatchResults.has(t.id) && (() => {
-                        const matchResult = chequeMatchResults.get(t.id)!;
-                        if (matchResult.confidence === 'HIGH') {
-                          return (
-                            <span className="text-green-700 text-xs font-medium flex items-center gap-1">
-                              <CheckCircle2 size={12} />
-                              High Confidence
+                  {/* Category & Account */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-semibold text-slate-600 mb-1 block">Category</label>
+                      <select
+                        value={txData.category}
+                        onChange={(e) => handleInlineFieldChange('category', e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                      >
+                        {settings.categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs font-semibold text-slate-600 mb-1 block">Account</label>
+                      <select
+                        value={txData.accountId || ''}
+                        onChange={(e) => {
+                          const acc = settings.accounts.find(a => a.id === e.target.value);
+                          handleInlineFieldChange('accountId', e.target.value);
+                          handleInlineFieldChange('account', acc?.name || '');
+                        }}
+                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                      >
+                        <option value="">None</option>
+                        {settings.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Date */}
+                  <div>
+                    <label className="text-xs font-semibold text-slate-600 mb-1 block">Date</label>
+                    <input
+                      type="date"
+                      value={txData.date}
+                      onChange={(e) => handleInlineFieldChange('date', e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                    />
+                  </div>
+
+                  {/* Cheque Number (if cheque) */}
+                  {txData.isCheque && (
+                    <div>
+                      <label className="text-xs font-semibold text-slate-600 mb-1 block">📝 Cheque Number</label>
+                      <input
+                        type="text"
+                        value={txData.chequeNumber || ''}
+                        onChange={(e) => handleInlineFieldChange('chequeNumber', e.target.value)}
+                        className="w-full px-3 py-2 bg-purple-50 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                        placeholder="Enter cheque number"
+                      />
+                    </div>
+                  )}
+
+                  {/* Receipt Upload Section */}
+                  <div className="pt-3 border-t border-slate-200">
+                    {!receipt && !txData.receiptImage ? (
+                      <label className="block">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => handleReceiptUploadForTransaction(t.id, e)}
+                          className="hidden"
+                        />
+                        <div className="w-full py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-colors cursor-pointer flex items-center justify-center gap-2">
+                          📎 Upload Receipt
+                        </div>
+                      </label>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="relative h-24 bg-slate-100 rounded-lg overflow-hidden">
+                          <img
+                            src={receipt?.data || txData.receiptImage}
+                            alt="Receipt"
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <div className="flex gap-2 items-center">
+                          <label className="flex-1">
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={(e) => handleReceiptUploadForTransaction(t.id, e)}
+                              className="hidden"
+                            />
+                            <div className="w-full py-1.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs font-medium transition-colors cursor-pointer text-center">
+                              Change
+                            </div>
+                          </label>
+                          <button
+                            onClick={() => handleRemoveReceipt(t.id)}
+                            className="flex-1 py-1.5 px-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-xs font-medium transition-colors"
+                          >
+                            Remove
+                          </button>
+                          <label className="flex items-center gap-1 text-xs text-slate-600 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={receipt?.keep || false}
+                              onChange={() => handleToggleKeepReceipt(t.id)}
+                              className="rounded"
+                            />
+                            Keep
+                          </label>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex gap-2 pt-2">
+                    <button
+                      onClick={handleSaveInlineEdit}
+                      className="flex-1 py-2 px-3 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-2"
+                    >
+                      <Save size={14} />
+                      Save
+                    </button>
+                    <button
+                      onClick={handleCancelInlineEdit}
+                      className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-sm font-medium transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* VIEW MODE */
+                <>
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <div className="font-bold text-slate-800 text-lg">{t.merchant}</div>
+                      <div className="text-xs text-slate-500 uppercase tracking-wide font-semibold mt-1">{t.category}</div>
+                    </div>
+                    <div className={`font-bold text-lg ${
+                      t.type === TransactionType.INCOME ? 'text-green-600' :
+                      t.type === TransactionType.OBLIGATION ? 'text-orange-600' :
+                      'text-slate-800'
+                    }`}>
+                      {t.type === TransactionType.INCOME ? '+' : '-'}{t.currency} {t.amount.toFixed(2)}
+                    </div>
+                  </div>
+                  <div className="text-xs text-slate-400 flex flex-col gap-1">
+                    <div className="flex items-center gap-2">
+                      <span>{t.date}</span>
+                      {t.account && <span className="bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded font-mono">{t.account}</span>}
+                    </div>
+                    {t.isTransfer && <span className="text-brand-600 font-bold">Transfer</span>}
+                    {t.originalAmount && t.originalAmount !== t.amount && (
+                      <div className="text-slate-500 italic">
+                        Converted from {t.originalCurrency} {t.originalAmount.toFixed(2)}
+                      </div>
+                    )}
+                    {t.rawText && <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-500 truncate max-w-[250px]">Src: "{t.rawText}"</span>}
+                    {receipt && <span className="bg-green-50 text-green-700 px-2 py-0.5 rounded font-medium">📎 Receipt Attached</span>}
+
+                    {/* Cheque Status Indicator */}
+                    {t.isCheque && (
+                      <div className="mt-2 pt-2 border-t border-slate-100">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="bg-purple-50 text-purple-700 px-2 py-1 rounded-md font-semibold flex items-center gap-1.5">
+                            📝 Cheque #{t.chequeNumber}
+                          </span>
+                          {t.chequeStatus === 'CLEARED' ? (
+                            <span className="bg-green-50 text-green-700 px-2 py-1 rounded-md font-semibold flex items-center gap-1.5">
+                              <CheckCircle2 size={14} />
+                              Matched
                             </span>
-                          );
-                        } else if (matchResult.confidence === 'MEDIUM') {
-                          return (
-                            <span className="text-amber-700 text-xs font-medium flex items-center gap-1">
-                              <AlertTriangle size={12} />
-                              Partial Match
+                          ) : (
+                            <span className="bg-amber-50 text-amber-700 px-2 py-1 rounded-md font-semibold flex items-center gap-1.5">
+                              <AlertCircle size={14} />
+                              Pending
                             </span>
-                          );
-                        } else if (matchResult.confidence === 'LOW') {
-                          return (
-                            <span className="text-red-700 text-xs font-medium flex items-center gap-1">
-                              <AlertCircle size={12} />
-                              Low Confidence
-                            </span>
-                          );
-                        } else if (matchResult.confidence === 'NONE') {
-                          return (
-                            <span className="text-slate-600 text-xs font-medium flex items-center gap-1">
-                              <AlertCircle size={12} />
-                              No Match
-                            </span>
-                          );
-                        }
-                      })()}
+                          )}
+
+                          {/* Match Confidence Badge */}
+                          {chequeMatchResults.has(t.id) && (() => {
+                            const matchResult = chequeMatchResults.get(t.id)!;
+                            if (matchResult.confidence === 'HIGH') {
+                              return (
+                                <span className="text-green-700 text-xs font-medium flex items-center gap-1">
+                                  <CheckCircle2 size={12} />
+                                  High Confidence
+                                </span>
+                              );
+                            } else if (matchResult.confidence === 'MEDIUM') {
+                              return (
+                                <span className="text-amber-700 text-xs font-medium flex items-center gap-1">
+                                  <AlertTriangle size={12} />
+                                  Partial Match
+                                </span>
+                              );
+                            } else if (matchResult.confidence === 'LOW') {
+                              return (
+                                <span className="text-red-700 text-xs font-medium flex items-center gap-1">
+                                  <AlertCircle size={12} />
+                                  Low Confidence
+                                </span>
+                              );
+                            } else if (matchResult.confidence === 'NONE') {
+                              return (
+                                <span className="text-slate-600 text-xs font-medium flex items-center gap-1">
+                                  <AlertCircle size={12} />
+                                  No Match
+                                </span>
+                              );
+                            }
+                          })()}
+                        </div>
+
+                        {/* Match Details */}
+                        {chequeMatchResults.has(t.id) && chequeMatchResults.get(t.id)!.matchReason && (
+                          <div className="text-xs text-slate-600 mt-1 bg-slate-50 px-2 py-1 rounded">
+                            {chequeMatchResults.get(t.id)!.matchReason}
+                          </div>
+                        )}
+
+                        {/* Mismatch Warning */}
+                        {chequeMatchResults.has(t.id) && chequeMatchResults.get(t.id)!.mismatchWarning && (
+                          <div className="text-xs text-amber-700 mt-1 bg-amber-50 px-2 py-1 rounded flex items-start gap-1">
+                            <AlertTriangle size={12} className="mt-0.5 flex-shrink-0" />
+                            <span>{chequeMatchResults.get(t.id)!.mismatchWarning}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Action Buttons - View Mode */}
+                  <div className="mt-3 space-y-2" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleCreateRule(t)}
+                        className="flex-1 py-2 px-3 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-1.5"
+                      >
+                        <BookmarkPlus size={14} />
+                        Remember
+                      </button>
+                      <button
+                        onClick={() => handleEditTransaction(t)}
+                        className="flex-1 py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-1.5"
+                      >
+                        ⋯ More Options
+                      </button>
                     </div>
 
-                    {/* Match Details */}
-                    {chequeMatchResults.has(t.id) && chequeMatchResults.get(t.id)!.matchReason && (
-                      <div className="text-xs text-slate-600 mt-1 bg-slate-50 px-2 py-1 rounded">
-                        {chequeMatchResults.get(t.id)!.matchReason}
-                      </div>
-                    )}
-
-                    {/* Mismatch Warning */}
-                    {chequeMatchResults.has(t.id) && chequeMatchResults.get(t.id)!.mismatchWarning && (
-                      <div className="text-xs text-amber-700 mt-1 bg-amber-50 px-2 py-1 rounded flex items-start gap-1">
-                        <AlertTriangle size={12} className="mt-0.5 flex-shrink-0" />
-                        <span>{chequeMatchResults.get(t.id)!.mismatchWarning}</span>
-                      </div>
+                    {/* Split with Receipt - Only show if receipt exists */}
+                    {(receipt || t.receiptImage) && (
+                      <button
+                        onClick={() => handleSplitTransaction(t)}
+                        disabled={isSplitLoading && splittingTransaction?.id === t.id}
+                        className="w-full py-2 px-3 bg-gradient-to-r from-purple-50 to-pink-50 hover:from-purple-100 hover:to-pink-100 text-purple-700 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-2"
+                      >
+                        {isSplitLoading && splittingTransaction?.id === t.id ? (
+                          <>
+                            <Loader2 className="animate-spin" size={14} />
+                            Analyzing Receipt...
+                          </>
+                        ) : (
+                          <>
+                            📄 Split with Receipt
+                          </>
+                        )}
+                      </button>
                     )}
                   </div>
-                )}
-              </div>
-
-              {/* Split with Receipt Button */}
-              <button
-                onClick={() => handleSplitTransaction(t)}
-                disabled={isSplitLoading && splittingTransaction?.id === t.id}
-                className="mt-3 w-full py-2 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-2"
-              >
-                {isSplitLoading && splittingTransaction?.id === t.id ? (
-                  <>
-                    <Loader2 className="animate-spin" size={14} />
-                    Analyzing Receipt...
-                  </>
-                ) : (
-                  <>
-                    📄 Split with Receipt
-                  </>
-                )}
-              </button>
+                </>
+              )}
             </div>
-          ))}
+           );
+           })}
         </div>
 
         <div className="mt-6 flex gap-3 pt-4 border-t border-slate-100 bg-slate-50/50 backdrop-blur-sm sticky bottom-0">
@@ -542,54 +818,6 @@ const AddTransaction: React.FC<AddTransactionProps> = ({ onAdd, onCancel, settin
                     onChange={handleImageUpload}
                  />
               </div>
-           </div>
-
-           <div className="space-y-3 mb-6">
-             <div className="flex items-center justify-between">
-               <label className="text-sm font-medium text-gray-700">Receipt Image (Optional)</label>
-               <button
-                 type="button"
-                 onClick={() => receiptFileInputRef.current?.click()}
-                 className="px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition"
-               >
-                 {receiptImage ? 'Change' : 'Upload'}
-               </button>
-             </div>
-
-             <input
-               ref={receiptFileInputRef}
-               type="file"
-               accept="image/*"
-               onChange={handleReceiptUpload}
-               className="hidden"
-             />
-
-             {receiptImage && (
-               <div className="relative">
-                 <img
-                   src={receiptImage}
-                   alt="Receipt"
-                   className="w-full h-32 object-cover rounded-lg"
-                 />
-                 <button
-                   type="button"
-                   onClick={() => setReceiptImage(null)}
-                   className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full hover:bg-red-600"
-                 >
-                   <X className="w-4 h-4" />
-                 </button>
-
-                 <label className="flex items-center gap-2 mt-2 text-sm">
-                   <input
-                     type="checkbox"
-                     checked={keepReceipt}
-                     onChange={(e) => setKeepReceipt(e.target.checked)}
-                     className="rounded"
-                   />
-                   <span className="text-gray-700">Keep receipt (prevent auto-deletion)</span>
-                 </label>
-               </div>
-             )}
            </div>
 
            {error && (

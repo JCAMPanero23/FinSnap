@@ -762,6 +762,7 @@ const App: React.FC = () => {
             onCancel={() => setCurrentView('dashboard')}
             settings={settings}
             existingTransactions={transactions}
+            onAddRule={handleAddRuleFromTransaction}
           />
         );
       case 'accounts':
