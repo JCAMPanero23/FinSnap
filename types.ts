@@ -132,6 +132,11 @@ export interface Transaction {
   };
 
   isTransfer?: boolean; // New flag to identify transfers
+
+  // Cheque-specific fields
+  isCheque?: boolean; // True if transaction is a cheque payment
+  chequeNumber?: string; // Cheque number from bank statement
+  chequeStatus?: 'PENDING' | 'CLEARED'; // Whether cheque has been cleared
 }
 
 export type View = 'dashboard' | 'accounts' | 'categories' | 'add' | 'history' | 'settings' | 'calendar' | 'planning' | 'warranties' | 'bills';

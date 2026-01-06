@@ -50,36 +50,58 @@ export const parseTransactions = async (
       The user's Base Currency is: ${settings.baseCurrency}.
       The user's Custom Categories are: ${categoryList}.
       The user's Known Accounts are: [${accountList}].
-      
-      Parsing Helpers: [${recurringRulesList}]. 
-      Use these helpers: 
+
+      Parsing Helpers: [${recurringRulesList}].
+      Use these helpers:
       - If a merchant name roughly matches a keyword and type is 'EXPENSE' or 'INCOME', use the provided category.
       - If a merchant/keyword matches a rule with type='TRANSFER', strictly treat it as a TRANSFER.
 
       CRITICAL RULES:
       1. **FAILED TRANSACTIONS**: If a message says "could not be completed", "declined", "failed", "unsuccessful", or "reversed", **IGNORE IT COMPLETELY**. Do NOT output a transaction for it.
-      2. **WITHDRAWALS**: If the text indicates a "Cash Withdrawal" or "ATM Withdrawal":
+
+      2. **BANK STATEMENT PARSING**:
+         - If parsing an image/text that looks like a bank statement (has header with "Account Number", "Account Statement", table structure), recognize the account in the HEADER.
+         - The account number shown at the TOP of the statement is the SOURCE account for ALL transactions in the table below.
+         - DO NOT treat the header account as a separate transaction or different account.
+         - Match the header account number with Known Accounts using last 4 digits or full number.
+         - Apply that accountId to ALL parsed transactions from the table.
+
+      3. **CHEQUE DETECTION**:
+         - Look for cheque/check numbers in transactions (e.g., "Ref/Cheque No: 241626", "CHQ 123456", "Cheque Number: XXX").
+         - If a transaction mentions a cheque number, set 'isCheque' to true and populate 'chequeNumber' with the number.
+         - Cheque transactions should have status 'PENDING' by default (they need to be cleared/matched later).
+         - Common cheque indicators: "CHQ", "CHEQUE", "CHECK", "Ref/Cheque No", or standalone 6-digit numbers in a cheque column.
+
+      4. **WITHDRAWALS**: If the text indicates a "Cash Withdrawal" or "ATM Withdrawal":
          - Treat it as a TRANSFER.
          - Source: The bank/card mentioned.
          - Destination: ${cashAccountInfo}.
          - Generate TWO transactions: Expense from Source, Income to Destination.
-      3. Identify if a transaction is an EXPENSE, INCOME, or TRANSFER.
-      4. Extract the Merchant Name (clean up formatting).
-      5. Categorize the transaction into ONE of the user's provided categories.
-      6. Extract the date (YYYY-MM-DD) and time (HH:mm). Assume current year if missing.
-      7. ACCOUNT MATCHING:
+
+      5. Identify if a transaction is an EXPENSE, INCOME, or TRANSFER.
+
+      6. Extract the Merchant Name (clean up formatting).
+
+      7. Categorize the transaction into ONE of the user's provided categories.
+
+      8. Extract the date (YYYY-MM-DD) and time (HH:mm). Assume current year if missing.
+
+      9. ACCOUNT MATCHING:
          - Look for card/account digits (e.g. "ending 1234", "no. XXX920001", "Cr.Card XXX1337"). Match with Known Accounts.
+         - For bank statements, use the account from the header for all transactions.
          - Set 'accountId' if matched.
-      8. BALANCE & CURRENCY:
+
+      10. BALANCE & CURRENCY:
          - If the transaction is in a foreign currency (not ${settings.baseCurrency}), populate 'originalAmount' and 'originalCurrency'.
          - Extract 'amount' in ${settings.baseCurrency}. If not explicitly stated, estimate it or leave it equal to originalAmount (it will be refined by balance logic if available).
          - Extract the numeric value of balance even if attached to currency code (e.g. "AED8637.52" -> 8637.52).
-         - Look for "Available Balance", "Avl Bal", "Balance is". Extract into 'parsedMeta.availableBalance'.
+         - Look for "Available Balance", "Avl Bal", "Balance is", or "Balance" column in statements. Extract into 'parsedMeta.availableBalance'.
          - Look for "Available Credit Limit", "Avl. Cr.limit". Extract into 'parsedMeta.availableCredit'.
-      9. TRANSFERS:
+
+      11. TRANSFERS:
          - If text describes a transfer between TWO known accounts, generate TWO transaction objects (Expense from Source, Income to Dest).
          - Set 'isTransfer': true for both.
-      
+
       Return an array of transactions.
     `;
 
@@ -107,6 +129,9 @@ export const parseTransactions = async (
               accountId: { type: Type.STRING },
               rawText: { type: Type.STRING },
               isTransfer: { type: Type.BOOLEAN },
+              isCheque: { type: Type.BOOLEAN, description: "True if this transaction is a cheque payment" },
+              chequeNumber: { type: Type.STRING, description: "The cheque/check number if detected" },
+              chequeStatus: { type: Type.STRING, enum: ["PENDING", "CLEARED"], description: "Cheque status - PENDING for new cheques" },
               tags: { type: Type.ARRAY, items: { type: Type.STRING } },
               parsedMeta: {
                 type: Type.OBJECT,
@@ -191,12 +216,17 @@ export const parseTransactions = async (
       }
 
       // Finalize Exchange Rate
-      tx.exchangeRate = (tx.originalAmount && tx.amount && tx.originalAmount !== tx.amount) 
-        ? tx.amount / tx.originalAmount 
+      tx.exchangeRate = (tx.originalAmount && tx.amount && tx.originalAmount !== tx.amount)
+        ? tx.amount / tx.originalAmount
         : 1;
 
       tx.type = tx.type === "INCOME" ? TransactionType.INCOME : TransactionType.EXPENSE;
-      
+
+      // Set default cheque status if cheque detected
+      if (tx.isCheque && !tx.chequeStatus) {
+        tx.chequeStatus = 'PENDING';
+      }
+
       return tx;
     });
 

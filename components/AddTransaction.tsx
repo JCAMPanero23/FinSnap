@@ -1,10 +1,11 @@
 import React, { useState, useRef } from 'react';
 import { parseTransactions } from '../services/geminiService';
 import { Transaction, TransactionType, AppSettings } from '../types';
-import { Sparkles, ArrowRight, X, Check, Loader2, MessageSquareText, Clipboard, Info, Image as ImageIcon, Banknote, BrainCircuit, Calendar } from 'lucide-react';
+import { Sparkles, ArrowRight, X, Check, Loader2, MessageSquareText, Clipboard, Info, Image as ImageIcon, Banknote, BrainCircuit, Calendar, AlertCircle, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { parseReceiptLineItems, ReceiptLineItem } from '../services/receiptSplitService';
 import SplitEditorModal, { ItemGroup } from './SplitEditorModal';
+import { batchMatchCheques, getChequeMatchSummary, ChequeMatchResult } from '../services/chequeMatchingService';
 
 interface AddTransactionProps {
   onAdd: (transactions: Transaction[]) => void;
@@ -26,6 +27,9 @@ const AddTransaction: React.FC<AddTransactionProps> = ({ onAdd, onCancel, settin
   const [receiptImage, setReceiptImage] = useState<string | null>(null);
   const [keepReceipt, setKeepReceipt] = useState(false);
   const receiptFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Cheque Matching State
+  const [chequeMatchResults, setChequeMatchResults] = useState<Map<string, ChequeMatchResult>>(new Map());
 
   // Split State
   const [splittingTransaction, setSplittingTransaction] = useState<Transaction | null>(null);
@@ -74,7 +78,11 @@ const AddTransaction: React.FC<AddTransactionProps> = ({ onAdd, onCancel, settin
       const uniqueResults: Transaction[] = [];
       let duplicateCount = 0;
 
-      results.forEach(r => {
+      // Step 1: Match cheques before creating transaction objects
+      const chequeMatches = batchMatchCheques(results, settings.scheduledTransactions || []);
+      const chequeMatchMap = new Map<string, ChequeMatchResult>();
+
+      results.forEach((r, index) => {
         if (!isDuplicate(r)) {
           // Map accountId: If Gemini returned last4digits, find the actual account UUID
           let mappedAccountId = r.accountId;
@@ -86,21 +94,58 @@ const AddTransaction: React.FC<AddTransactionProps> = ({ onAdd, onCancel, settin
             mappedAccountId = matchedAccount?.id;
           }
 
-          uniqueResults.push({
+          const txId = uuidv4();
+          const transaction: Transaction = {
             ...r,
-            id: uuidv4(),
+            id: txId,
             accountId: mappedAccountId,
             receiptImage: receiptImage || undefined,
             keepReceipt: keepReceipt || undefined
-          });
+          };
+
+          // Step 2: If this is a cheque, check for match and update status
+          const matchResult = chequeMatches.get(index);
+          if (matchResult && matchResult.matchedScheduledTransaction) {
+            // Auto-link the matched scheduled transaction ID
+            transaction.chequeStatus = 'CLEARED';
+            chequeMatchMap.set(txId, matchResult);
+          } else if (r.isCheque) {
+            // No match found - keep as PENDING
+            transaction.chequeStatus = 'PENDING';
+            if (matchResult) {
+              chequeMatchMap.set(txId, matchResult);
+            }
+          }
+
+          uniqueResults.push(transaction);
         } else {
           duplicateCount++;
         }
       });
 
-      setPreviewData(uniqueResults);
+      // Step 3: Set match results for display
+      setChequeMatchResults(chequeMatchMap);
+
+      // Step 4: Display summary
+      const matchSummary = getChequeMatchSummary(chequeMatches);
+      let statusMessage = '';
+
+      if (matchSummary.total > 0) {
+        statusMessage = `Cheques: ${matchSummary.highConfidence} matched, ${matchSummary.mediumConfidence} partial, ${matchSummary.noMatch} unmatched`;
+        if (matchSummary.hasIssues && matchSummary.warnings.length > 0) {
+          statusMessage += '\n⚠️ ' + matchSummary.warnings[0];
+        }
+      }
+
       if (duplicateCount > 0) {
-        setError(`Skipped ${duplicateCount} duplicate transaction(s).`);
+        statusMessage = statusMessage
+          ? `${statusMessage}\nSkipped ${duplicateCount} duplicate(s)`
+          : `Skipped ${duplicateCount} duplicate transaction(s).`;
+      }
+
+      setPreviewData(uniqueResults);
+      if (statusMessage) {
+        setError(statusMessage);
       }
     } catch (err) {
       setError("We couldn't parse that. Try pasting clearer text or a better image.");
@@ -305,6 +350,77 @@ const AddTransaction: React.FC<AddTransactionProps> = ({ onAdd, onCancel, settin
                   </div>
                 )}
                 {t.rawText && <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-500 truncate max-w-[250px]">Src: "{t.rawText}"</span>}
+
+                {/* Cheque Status Indicator */}
+                {t.isCheque && (
+                  <div className="mt-2 pt-2 border-t border-slate-100">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="bg-purple-50 text-purple-700 px-2 py-1 rounded-md font-semibold flex items-center gap-1.5">
+                        📝 Cheque #{t.chequeNumber}
+                      </span>
+                      {t.chequeStatus === 'CLEARED' ? (
+                        <span className="bg-green-50 text-green-700 px-2 py-1 rounded-md font-semibold flex items-center gap-1.5">
+                          <CheckCircle2 size={14} />
+                          Matched
+                        </span>
+                      ) : (
+                        <span className="bg-amber-50 text-amber-700 px-2 py-1 rounded-md font-semibold flex items-center gap-1.5">
+                          <AlertCircle size={14} />
+                          Pending
+                        </span>
+                      )}
+
+                      {/* Match Confidence Badge */}
+                      {chequeMatchResults.has(t.id) && (() => {
+                        const matchResult = chequeMatchResults.get(t.id)!;
+                        if (matchResult.confidence === 'HIGH') {
+                          return (
+                            <span className="text-green-700 text-xs font-medium flex items-center gap-1">
+                              <CheckCircle2 size={12} />
+                              High Confidence
+                            </span>
+                          );
+                        } else if (matchResult.confidence === 'MEDIUM') {
+                          return (
+                            <span className="text-amber-700 text-xs font-medium flex items-center gap-1">
+                              <AlertTriangle size={12} />
+                              Partial Match
+                            </span>
+                          );
+                        } else if (matchResult.confidence === 'LOW') {
+                          return (
+                            <span className="text-red-700 text-xs font-medium flex items-center gap-1">
+                              <AlertCircle size={12} />
+                              Low Confidence
+                            </span>
+                          );
+                        } else if (matchResult.confidence === 'NONE') {
+                          return (
+                            <span className="text-slate-600 text-xs font-medium flex items-center gap-1">
+                              <AlertCircle size={12} />
+                              No Match
+                            </span>
+                          );
+                        }
+                      })()}
+                    </div>
+
+                    {/* Match Details */}
+                    {chequeMatchResults.has(t.id) && chequeMatchResults.get(t.id)!.matchReason && (
+                      <div className="text-xs text-slate-600 mt-1 bg-slate-50 px-2 py-1 rounded">
+                        {chequeMatchResults.get(t.id)!.matchReason}
+                      </div>
+                    )}
+
+                    {/* Mismatch Warning */}
+                    {chequeMatchResults.has(t.id) && chequeMatchResults.get(t.id)!.mismatchWarning && (
+                      <div className="text-xs text-amber-700 mt-1 bg-amber-50 px-2 py-1 rounded flex items-start gap-1">
+                        <AlertTriangle size={12} className="mt-0.5 flex-shrink-0" />
+                        <span>{chequeMatchResults.get(t.id)!.mismatchWarning}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Split with Receipt Button */}
