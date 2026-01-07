@@ -329,7 +329,22 @@ const App: React.FC = () => {
       await saveTransaction(tx);
 
       // Update account balances
-      if (tx.accountId) {
+      if (tx.type === TransactionType.TRANSFER && tx.accountId && tx.toAccountId) {
+        // Handle TRANSFER: subtract from FROM account, add to TO account
+        const fromAccount = settings.accounts.find(a => a.id === tx.accountId);
+        const toAccount = settings.accounts.find(a => a.id === tx.toAccountId);
+
+        if (fromAccount) {
+          const newFromBalance = fromAccount.balance - tx.amount;
+          await saveAccount({ ...fromAccount, balance: newFromBalance });
+        }
+
+        if (toAccount) {
+          const newToBalance = toAccount.balance + tx.amount;
+          await saveAccount({ ...toAccount, balance: newToBalance });
+        }
+      } else if (tx.accountId) {
+        // Handle EXPENSE/INCOME
         const account = settings.accounts.find(a => a.id === tx.accountId);
         if (account) {
           let newBalance = account.balance;
@@ -404,27 +419,42 @@ const App: React.FC = () => {
       );
 
       // Update account balance (use the SAME logic from saveTransactionsNormally)
-      const account = settings.accounts.find(
-        a => a.id === matchingCandidate.transaction.accountId
-      );
-      if (account) {
-        const tx = matchingCandidate.transaction;
-        let newBalance = account.balance;
+      const tx = matchingCandidate.transaction;
 
-        if (tx.parsedMeta?.availableBalance !== undefined) {
-          newBalance = tx.parsedMeta.availableBalance;
-        } else if (tx.parsedMeta?.availableCredit !== undefined && account.totalCreditLimit) {
-          newBalance = -(account.totalCreditLimit - tx.parsedMeta.availableCredit);
-        } else {
-          if (tx.type === TransactionType.EXPENSE || tx.isTransfer) {
-            newBalance -= tx.amount;
-          } else if (tx.type === TransactionType.INCOME) {
-            newBalance += tx.amount;
-          }
+      if (tx.type === TransactionType.TRANSFER && tx.accountId && tx.toAccountId) {
+        // Handle TRANSFER: subtract from FROM account, add to TO account
+        const fromAccount = settings.accounts.find(a => a.id === tx.accountId);
+        const toAccount = settings.accounts.find(a => a.id === tx.toAccountId);
+
+        if (fromAccount) {
+          const newFromBalance = fromAccount.balance - tx.amount;
+          await saveAccount({ ...fromAccount, balance: newFromBalance });
         }
 
-        const updatedAccount = { ...account, balance: newBalance };
-        await saveAccount(updatedAccount);
+        if (toAccount) {
+          const newToBalance = toAccount.balance + tx.amount;
+          await saveAccount({ ...toAccount, balance: newToBalance });
+        }
+      } else if (tx.accountId) {
+        const account = settings.accounts.find(a => a.id === tx.accountId);
+        if (account) {
+          let newBalance = account.balance;
+
+          if (tx.parsedMeta?.availableBalance !== undefined) {
+            newBalance = tx.parsedMeta.availableBalance;
+          } else if (tx.parsedMeta?.availableCredit !== undefined && account.totalCreditLimit) {
+            newBalance = -(account.totalCreditLimit - tx.parsedMeta.availableCredit);
+          } else {
+            if (tx.type === TransactionType.EXPENSE) {
+              newBalance -= tx.amount;
+            } else if (tx.type === TransactionType.INCOME) {
+              newBalance += tx.amount;
+            }
+          }
+
+          const updatedAccount = { ...account, balance: newBalance };
+          await saveAccount(updatedAccount);
+        }
       }
 
       setMatchingCandidate(null);

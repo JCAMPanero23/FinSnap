@@ -112,7 +112,7 @@ export interface Transaction {
   category: string;
   type: TransactionType;
   account?: string; // Snapshot of account name or raw text
-  accountId?: string; // Reference to configured account
+  accountId?: string; // Reference to configured account (for TRANSFER: FROM account)
   rawText?: string;
   tags?: string[];
 
@@ -132,6 +132,9 @@ export interface Transaction {
   };
 
   isTransfer?: boolean; // New flag to identify transfers
+
+  // Transfer-specific fields
+  toAccountId?: string; // For TRANSFER: destination account ID
 
   // Cheque-specific fields
   isCheque?: boolean; // True if transaction is a cheque payment

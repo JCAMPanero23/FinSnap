@@ -341,31 +341,67 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-500 mb-1">Account</label>
-            <div className="space-y-2">
-              <select
-                value={formData.accountId || 'OTHER_MANUAL'}
-                onChange={handleAccountChange}
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500 appearance-none"
-              >
-                {accounts.map(acc => (
-                  <option key={acc.id} value={acc.id}>{acc.name} (...{acc.last4Digits || '?'})</option>
-                ))}
-                <option value="OTHER_MANUAL">Other (Type Custom Name)</option>
-              </select>
-
-              {(!formData.accountId) && (
-                 <input
-                    type="text"
-                    placeholder="e.g. Visa ...1234"
-                    value={formData.account || ''}
-                    onChange={(e) => handleChange('account', e.target.value)}
-                    className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500 animate-in fade-in slide-in-from-top-1"
-                  />
-              )}
+          {/* Account Selection - Different UI for TRANSFER vs normal transactions */}
+          {formData.type === TransactionType.TRANSFER ? (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1">From Account</label>
+                <select
+                  value={formData.accountId || ''}
+                  onChange={(e) => {
+                    const acc = accounts.find(a => a.id === e.target.value);
+                    handleChange('accountId', e.target.value);
+                    handleChange('account', acc?.name || '');
+                  }}
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500 appearance-none"
+                >
+                  <option value="">Select...</option>
+                  {accounts.map(acc => (
+                    <option key={acc.id} value={acc.id}>{acc.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1">To Account</label>
+                <select
+                  value={formData.toAccountId || ''}
+                  onChange={(e) => handleChange('toAccountId', e.target.value)}
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500 appearance-none"
+                >
+                  <option value="">Select...</option>
+                  {accounts.map(acc => (
+                    <option key={acc.id} value={acc.id}>{acc.name}</option>
+                  ))}
+                </select>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 mb-1">Account</label>
+              <div className="space-y-2">
+                <select
+                  value={formData.accountId || 'OTHER_MANUAL'}
+                  onChange={handleAccountChange}
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500 appearance-none"
+                >
+                  {accounts.map(acc => (
+                    <option key={acc.id} value={acc.id}>{acc.name} (...{acc.last4Digits || '?'})</option>
+                  ))}
+                  <option value="OTHER_MANUAL">Other (Type Custom Name)</option>
+                </select>
+
+                {(!formData.accountId) && (
+                   <input
+                      type="text"
+                      placeholder="e.g. Visa ...1234"
+                      value={formData.account || ''}
+                      onChange={(e) => handleChange('account', e.target.value)}
+                      className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500 animate-in fade-in slide-in-from-top-1"
+                    />
+                )}
+              </div>
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Receipt</label>

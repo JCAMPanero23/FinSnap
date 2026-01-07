@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { parseTransactions } from '../services/geminiService';
 import { Transaction, TransactionType, AppSettings } from '../types';
-import { Sparkles, ArrowRight, X, Check, Loader2, MessageSquareText, Clipboard, Info, Image as ImageIcon, Banknote, BrainCircuit, Calendar, AlertCircle, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Sparkles, ArrowRight, X, Check, Loader2, MessageSquareText, Clipboard, Info, Image as ImageIcon, Banknote, BrainCircuit, Calendar, AlertCircle, CheckCircle2, AlertTriangle, BookmarkPlus, Save } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { parseReceiptLineItems, ReceiptLineItem } from '../services/receiptSplitService';
 import SplitEditorModal, { ItemGroup } from './SplitEditorModal';
@@ -49,6 +49,7 @@ const AddTransaction: React.FC<AddTransactionProps> = ({ onAdd, onCancel, settin
     const cashAcc = settings.accounts.find(a => a.type === 'Cash' || a.type === 'Wallet');
     return cashAcc ? cashAcc.id : '';
   });
+  const [manualToAccount, setManualToAccount] = useState(''); // For transfers
   const [manualDate, setManualDate] = useState(new Date().toISOString().split('T')[0]);
   const [manualTime, setManualTime] = useState(new Date().toTimeString().split(' ')[0].substring(0, 5));
 
@@ -211,19 +212,36 @@ const AddTransaction: React.FC<AddTransactionProps> = ({ onAdd, onCancel, settin
   const handleManualSubmit = () => {
     if (!manualAmount) return;
 
+    // Validation for transfers
+    if (manualType === TransactionType.TRANSFER) {
+      if (!manualAccount || !manualToAccount) {
+        setError("Please select both FROM and TO accounts for transfer.");
+        return;
+      }
+      if (manualAccount === manualToAccount) {
+        setError("FROM and TO accounts must be different.");
+        return;
+      }
+    }
+
     const accName = settings.accounts.find(a => a.id === manualAccount)?.name || 'Cash';
+    const toAccName = settings.accounts.find(a => a.id === manualToAccount)?.name;
 
     const newTxn: Transaction = {
       id: uuidv4(),
       amount: parseFloat(manualAmount),
       currency: settings.baseCurrency,
-      merchant: manualMerchant,
+      merchant: manualType === TransactionType.TRANSFER
+        ? `Transfer: ${accName} → ${toAccName}`
+        : manualMerchant,
       category: manualCategory,
       date: manualDate,
       time: manualTime,
       type: manualType,
       accountId: manualAccount || undefined,
       account: accName,
+      toAccountId: manualType === TransactionType.TRANSFER ? manualToAccount : undefined,
+      isTransfer: manualType === TransactionType.TRANSFER,
       rawText: 'Manual Entry'
     };
 
@@ -675,6 +693,61 @@ const AddTransaction: React.FC<AddTransactionProps> = ({ onAdd, onCancel, settin
                     )}
                   </div>
 
+                  {/* Receipt Upload Section - View Mode */}
+                  <div className="mt-3 pt-3 border-t border-slate-100" onClick={(e) => e.stopPropagation()}>
+                    {!receipt && !t.receiptImage ? (
+                      <label className="block">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => handleReceiptUploadForTransaction(t.id, e)}
+                          className="hidden"
+                        />
+                        <div className="w-full py-2 px-3 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-lg text-xs font-medium transition-colors cursor-pointer flex items-center justify-center gap-2 border border-slate-200">
+                          📎 Upload Receipt
+                        </div>
+                      </label>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="relative h-20 bg-slate-100 rounded-lg overflow-hidden">
+                          <img
+                            src={receipt?.data || t.receiptImage}
+                            alt="Receipt"
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <div className="flex gap-2 items-center">
+                          <label className="flex-1">
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={(e) => handleReceiptUploadForTransaction(t.id, e)}
+                              className="hidden"
+                            />
+                            <div className="w-full py-1.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs font-medium transition-colors cursor-pointer text-center">
+                              Change
+                            </div>
+                          </label>
+                          <button
+                            onClick={() => handleRemoveReceipt(t.id)}
+                            className="flex-1 py-1.5 px-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-xs font-medium transition-colors"
+                          >
+                            Remove
+                          </button>
+                          <label className="flex items-center gap-1 text-xs text-slate-600 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={receipt?.keep || false}
+                              onChange={() => handleToggleKeepReceipt(t.id)}
+                              className="rounded"
+                            />
+                            Keep
+                          </label>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                   {/* Action Buttons - View Mode */}
                   <div className="mt-3 space-y-2" onClick={(e) => e.stopPropagation()}>
                     <div className="flex gap-2">
@@ -843,10 +916,10 @@ const AddTransaction: React.FC<AddTransactionProps> = ({ onAdd, onCancel, settin
         <div className="flex-1 flex flex-col animate-in fade-in slide-in-from-left-4 duration-300">
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 space-y-4">
              {/* Transaction Type Toggle */}
-             <div className="flex gap-2 mb-2">
+             <div className="grid grid-cols-3 gap-2 mb-2">
                <button
                  onClick={() => setManualType(TransactionType.EXPENSE)}
-                 className={`flex-1 py-2 px-4 rounded-lg text-sm font-bold transition-all ${
+                 className={`py-2 px-4 rounded-lg text-sm font-bold transition-all ${
                    manualType === TransactionType.EXPENSE
                      ? 'bg-brand-600 text-white shadow-md'
                      : 'bg-slate-100 text-slate-500'
@@ -856,13 +929,23 @@ const AddTransaction: React.FC<AddTransactionProps> = ({ onAdd, onCancel, settin
                </button>
                <button
                  onClick={() => setManualType(TransactionType.INCOME)}
-                 className={`flex-1 py-2 px-4 rounded-lg text-sm font-bold transition-all ${
+                 className={`py-2 px-4 rounded-lg text-sm font-bold transition-all ${
                    manualType === TransactionType.INCOME
                      ? 'bg-green-600 text-white shadow-md'
                      : 'bg-slate-100 text-slate-500'
                  }`}
                >
                  Income
+               </button>
+               <button
+                 onClick={() => setManualType(TransactionType.TRANSFER)}
+                 className={`py-2 px-4 rounded-lg text-sm font-bold transition-all ${
+                   manualType === TransactionType.TRANSFER
+                     ? 'bg-purple-600 text-white shadow-md'
+                     : 'bg-slate-100 text-slate-500'
+                 }`}
+               >
+                 Transfer
                </button>
              </div>
 
@@ -903,30 +986,60 @@ const AddTransaction: React.FC<AddTransactionProps> = ({ onAdd, onCancel, settin
                />
              </div>
 
-             <div className="grid grid-cols-2 gap-4">
-                <div>
-                   <label className="text-xs font-bold text-slate-500 mb-1 block">Category</label>
-                   <select 
-                     value={manualCategory}
-                     onChange={(e) => setManualCategory(e.target.value)}
-                     className="w-full p-3 bg-slate-50 rounded-xl text-sm appearance-none"
-                   >
-                     {settings.categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-                   </select>
-                </div>
-                <div>
-                   <label className="text-xs font-bold text-slate-500 mb-1 block">Account</label>
-                   <select 
+             {/* Category (hide for transfers) */}
+             {manualType !== TransactionType.TRANSFER && (
+               <div>
+                 <label className="text-xs font-bold text-slate-500 mb-1 block">Category</label>
+                 <select
+                   value={manualCategory}
+                   onChange={(e) => setManualCategory(e.target.value)}
+                   className="w-full p-3 bg-slate-50 rounded-xl text-sm appearance-none"
+                 >
+                   {settings.categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                 </select>
+               </div>
+             )}
+
+             {/* Account Selection - Different for TRANSFER */}
+             {manualType === TransactionType.TRANSFER ? (
+               <div className="grid grid-cols-2 gap-4">
+                 <div>
+                   <label className="text-xs font-bold text-slate-500 mb-1 block">From Account</label>
+                   <select
                      value={manualAccount}
                      onChange={(e) => setManualAccount(e.target.value)}
                      className="w-full p-3 bg-slate-50 rounded-xl text-sm appearance-none"
                    >
-                     {settings.accounts.length === 0 && <option value="">No Accounts</option>}
+                     <option value="">Select...</option>
                      {settings.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                     <option value="">None (Cash)</option>
                    </select>
-                </div>
-             </div>
+                 </div>
+                 <div>
+                   <label className="text-xs font-bold text-slate-500 mb-1 block">To Account</label>
+                   <select
+                     value={manualToAccount}
+                     onChange={(e) => setManualToAccount(e.target.value)}
+                     className="w-full p-3 bg-slate-50 rounded-xl text-sm appearance-none"
+                   >
+                     <option value="">Select...</option>
+                     {settings.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                   </select>
+                 </div>
+               </div>
+             ) : (
+               <div>
+                 <label className="text-xs font-bold text-slate-500 mb-1 block">Account</label>
+                 <select
+                   value={manualAccount}
+                   onChange={(e) => setManualAccount(e.target.value)}
+                   className="w-full p-3 bg-slate-50 rounded-xl text-sm appearance-none"
+                 >
+                   {settings.accounts.length === 0 && <option value="">No Accounts</option>}
+                   {settings.accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                   <option value="">None (Cash)</option>
+                 </select>
+               </div>
+             )}
              
              {error && (
                <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg flex items-center gap-2">

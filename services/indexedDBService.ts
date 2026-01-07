@@ -5,7 +5,7 @@ interface FinSnapDB extends DBSchema {
   transactions: {
     key: string;
     value: Transaction;
-    indexes: { 'date': string; 'accountId': string; 'category': string; 'type': string };
+    indexes: { 'date': string; 'accountId': string; 'category': string; 'type': string; 'toAccountId': string };
   };
   accounts: {
     key: string;
@@ -35,7 +35,7 @@ interface FinSnapDB extends DBSchema {
 }
 
 const DB_NAME = 'finsnap_db';
-const DB_VERSION = 2;
+const DB_VERSION = 3; // Incremented for toAccountId index
 
 let dbInstance: IDBPDatabase<FinSnapDB> | null = null;
 
@@ -43,7 +43,7 @@ export async function initDB(): Promise<IDBPDatabase<FinSnapDB>> {
   if (dbInstance) return dbInstance;
 
   dbInstance = await openDB<FinSnapDB>(DB_NAME, DB_VERSION, {
-    upgrade(db) {
+    upgrade(db, oldVersion, newVersion, transaction) {
       // Transactions store
       if (!db.objectStoreNames.contains('transactions')) {
         const txStore = db.createObjectStore('transactions', { keyPath: 'id' });
@@ -51,6 +51,13 @@ export async function initDB(): Promise<IDBPDatabase<FinSnapDB>> {
         txStore.createIndex('accountId', 'accountId');
         txStore.createIndex('category', 'category');
         txStore.createIndex('type', 'type');
+        txStore.createIndex('toAccountId', 'toAccountId');
+      } else if (oldVersion < 3) {
+        // Migration: Add toAccountId index for existing databases
+        const txStore = transaction.objectStore('transactions');
+        if (!txStore.indexNames.contains('toAccountId')) {
+          txStore.createIndex('toAccountId', 'toAccountId');
+        }
       }
 
       // Accounts store
