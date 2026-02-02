@@ -276,7 +276,7 @@ const TransactionList: React.FC<TransactionListProps> = ({
         ) : (
           Object.keys(groupedTransactions).sort((a,b) => new Date(b).getTime() - new Date(a).getTime()).map(date => (
             <div key={date}>
-              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 px-1">{date}</h3>
+              <h3 className="text-xs font-semibold text-slate-900 uppercase tracking-wider mb-3 px-1 py-1 bg-white/50 rounded-md inline-block">{date}</h3>
               <div className="space-y-3">
                 {groupedTransactions[date].map(t => {
                   const accountDisplay = getAccountName(t);

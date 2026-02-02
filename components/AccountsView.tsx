@@ -1,11 +1,13 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Account, Transaction, TransactionType } from '../types';
-import { CreditCard, Wallet, Building2, Banknote, AlertTriangle, CheckCircle2, ChevronRight, ChevronLeft, Calendar } from 'lucide-react';
+import { CreditCard, Wallet, Building2, Banknote, AlertTriangle, CheckCircle2, ChevronRight, ChevronLeft, Calendar, Settings2 } from 'lucide-react';
+import BalanceAdjustmentModal from './BalanceAdjustmentModal';
 
 interface AccountsViewProps {
   accounts: Account[];
   transactions: Transaction[];
   onSelectAccount: (accountId: string) => void;
+  onAdjustBalance: (accountId: string, newBalance: number) => void;
   dateFilter: 'month' | 'year' | 'week' | 'custom' | 'all';
   onDateFilterChange: (filter: 'month' | 'year' | 'week' | 'custom' | 'all') => void;
   customStartDate: string;
@@ -24,6 +26,7 @@ const AccountsView: React.FC<AccountsViewProps> = ({
   accounts,
   transactions,
   onSelectAccount,
+  onAdjustBalance,
   dateFilter,
   onDateFilterChange,
   customStartDate,
@@ -34,6 +37,7 @@ const AccountsView: React.FC<AccountsViewProps> = ({
   onNextPeriod,
   currentPeriodLabel
 }) => {
+  const [adjustingAccount, setAdjustingAccount] = useState<Account | null>(null);
 
   // Date Filter Type Navigation
   const handlePreviousFilterType = () => {
@@ -251,15 +255,27 @@ const AccountsView: React.FC<AccountsViewProps> = ({
                     </div>
                   </div>
                 </div>
-                <div className="text-right">
-                  <div className={`text-lg font-bold ${acc.balance >= 0 ? 'text-slate-800' : 'text-red-500'}`}>
-                    {acc.balance < 0 ? '-' : ''}${Math.abs(acc.balance).toFixed(2)}
-                  </div>
-                  {acc.type === 'Credit Card' && acc.totalCreditLimit && (
-                    <div className="text-[10px] text-slate-400">
-                      of ${acc.totalCreditLimit.toLocaleString()} Limit
+                <div className="text-right space-y-2">
+                  <div>
+                    <div className={`text-lg font-bold ${acc.balance >= 0 ? 'text-slate-800' : 'text-red-500'}`}>
+                      {acc.balance < 0 ? '-' : ''}${Math.abs(acc.balance).toFixed(2)}
                     </div>
-                  )}
+                    {acc.type === 'Credit Card' && acc.totalCreditLimit && (
+                      <div className="text-[10px] text-slate-400">
+                        of ${acc.totalCreditLimit.toLocaleString()} Limit
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setAdjustingAccount(acc);
+                    }}
+                    className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium text-brand-600 bg-brand-50 hover:bg-brand-100 rounded-lg transition-colors"
+                  >
+                    <Settings2 size={12} />
+                    Adjust
+                  </button>
                 </div>
               </div>
 
@@ -315,6 +331,18 @@ const AccountsView: React.FC<AccountsViewProps> = ({
           );
         })}
       </div>
+
+      {/* Balance Adjustment Modal */}
+      {adjustingAccount && (
+        <BalanceAdjustmentModal
+          account={adjustingAccount}
+          onAdjust={(accountId, newBalance) => {
+            onAdjustBalance(accountId, newBalance);
+            setAdjustingAccount(null);
+          }}
+          onCancel={() => setAdjustingAccount(null)}
+        />
+      )}
     </div>
   );
 };

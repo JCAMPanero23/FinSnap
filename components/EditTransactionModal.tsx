@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Transaction, TransactionType, Category, Account } from '../types';
-import { X, Save, Trash2, RefreshCw, BookmarkPlus, Loader2 } from 'lucide-react';
+import { X, Save, Trash2, RefreshCw, BookmarkPlus, Loader2, Repeat } from 'lucide-react';
 import { parseReceiptLineItems, ReceiptLineItem } from '../services/receiptSplitService';
 import SplitEditorModal, { ItemGroup } from './SplitEditorModal';
+import RecurringBillFormModal from './RecurringBillFormModal';
+import { RecurringBillFormData } from '../services/transactionToScheduledService';
 import { v4 as uuidv4 } from 'uuid';
 
 interface EditTransactionModalProps {
@@ -13,6 +15,7 @@ interface EditTransactionModalProps {
   onDelete: (id: string) => void;
   onClose: () => void;
   onAddRule?: (merchant: string, category: string, type: TransactionType) => void;
+  onCreateRecurringBill?: (transaction: Transaction, recurringData: RecurringBillFormData) => void;
 }
 
 const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
@@ -22,7 +25,8 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
   onSave,
   onDelete,
   onClose,
-  onAddRule
+  onAddRule,
+  onCreateRecurringBill
 }) => {
   const [formData, setFormData] = useState<Transaction>({ ...transaction });
 
@@ -39,6 +43,9 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
   const [showSplitEditor, setShowSplitEditor] = useState(false);
   const [splitLineItems, setSplitLineItems] = useState<ReceiptLineItem[] | null>(null);
   const [isSplitLoading, setIsSplitLoading] = useState(false);
+
+  // Recurring bill state
+  const [showRecurringBillForm, setShowRecurringBillForm] = useState(false);
 
   const handleReceiptUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -126,6 +133,14 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
     if (onAddRule && formData.merchant) {
       onAddRule(formData.merchant, formData.category, formData.type);
       alert(`Added parsing rule for "${formData.merchant}"`);
+    }
+  };
+
+  const handleCreateRecurringBill = (recurringData: RecurringBillFormData) => {
+    if (onCreateRecurringBill) {
+      onCreateRecurringBill(formData, recurringData);
+      setShowRecurringBillForm(false);
+      onClose();
     }
   };
 
@@ -272,19 +287,31 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
           <div>
             <div className="flex justify-between items-center mb-1">
                <label className="block text-xs font-semibold text-slate-500">Merchant / Title</label>
-               {onAddRule && (
-                 <button 
-                   type="button" 
-                   onClick={handleSaveAsRule}
-                   className="text-[10px] flex items-center gap-1 text-brand-600 bg-brand-50 px-2 py-0.5 rounded hover:bg-brand-100"
-                   title="Always categorize this merchant like this in future imports"
-                 >
-                   <BookmarkPlus size={12} /> Remember Rule
-                 </button>
-               )}
+               <div className="flex gap-2">
+                 {onAddRule && (
+                   <button
+                     type="button"
+                     onClick={handleSaveAsRule}
+                     className="text-[10px] flex items-center gap-1 text-brand-600 bg-brand-50 px-2 py-0.5 rounded hover:bg-brand-100"
+                     title="Always categorize this merchant like this in future imports"
+                   >
+                     <BookmarkPlus size={12} /> Remember Rule
+                   </button>
+                 )}
+                 {onCreateRecurringBill && (
+                   <button
+                     type="button"
+                     onClick={() => setShowRecurringBillForm(true)}
+                     className="text-[10px] flex items-center gap-1 text-purple-600 bg-purple-50 px-2 py-0.5 rounded hover:bg-purple-100"
+                     title="Create a recurring bill from this transaction"
+                   >
+                     <Repeat size={12} /> Recurring Bill
+                   </button>
+                 )}
+               </div>
             </div>
-            <input 
-              type="text" 
+            <input
+              type="text"
               required
               value={formData.merchant}
               onChange={(e) => handleChange('merchant', e.target.value)}
@@ -507,6 +534,15 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
             setShowSplitEditor(false);
             setSplitLineItems(null);
           }}
+        />
+      )}
+
+      {/* Recurring Bill Form Modal */}
+      {showRecurringBillForm && (
+        <RecurringBillFormModal
+          transaction={formData}
+          onSave={handleCreateRecurringBill}
+          onCancel={() => setShowRecurringBillForm(false)}
         />
       )}
     </div>

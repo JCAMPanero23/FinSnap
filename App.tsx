@@ -57,6 +57,13 @@ import { isBiometricEnabled, setBiometricEnabled } from './services/biometricSer
 import BiometricLock from './components/BiometricLock';
 import BackupRestoreModal from './components/BackupRestoreModal';
 import { needsMigration, migrateFromSupabase } from './services/migrationService';
+import {
+  ensureUnknownCategory,
+  createUnknownTransaction,
+  detectBalanceDifference,
+  createBalanceDifferenceTransaction
+} from './services/unknownTransactionService';
+import { convertTransactionToScheduled, RecurringBillFormData } from './services/transactionToScheduledService';
 import { cleanupOldReceipts } from './services/receiptCleanupService';
 import { shouldAutoBackup, exportToCSV, exportReceiptsZip, uploadBackup, markAutoBackupComplete } from './services/backupService';
 
@@ -324,7 +331,9 @@ const App: React.FC = () => {
   };
 
   const saveTransactionsNormally = async (newTransactions: Transaction[]) => {
-    // Save to IndexedDB
+    const unknownTransactionsToCreate: Transaction[] = [];
+
+    // Save to IndexedDB and detect balance differences
     for (const tx of newTransactions) {
       await saveTransaction(tx);
 
@@ -347,13 +356,20 @@ const App: React.FC = () => {
         // Handle EXPENSE/INCOME
         const account = settings.accounts.find(a => a.id === tx.accountId);
         if (account) {
+          const oldBalance = account.balance;
           let newBalance = account.balance;
+          let usedParsedBalance = false;
 
           if (tx.parsedMeta?.availableBalance !== undefined) {
+            // Tier 1: Use parsed balance directly
             newBalance = tx.parsedMeta.availableBalance;
+            usedParsedBalance = true;
           } else if (tx.parsedMeta?.availableCredit !== undefined && account.totalCreditLimit) {
+            // Tier 2: Calculate from credit limit
             newBalance = -(account.totalCreditLimit - tx.parsedMeta.availableCredit);
+            usedParsedBalance = true;
           } else {
+            // Tier 3: Manual calculation
             if (tx.type === TransactionType.EXPENSE) {
               newBalance -= tx.amount;
             } else if (tx.type === TransactionType.INCOME) {
@@ -361,10 +377,50 @@ const App: React.FC = () => {
             }
           }
 
+          // Feature 3: Detect balance difference (only if parsed balance was used)
+          if (usedParsedBalance && tx.accountId) {
+            // Calculate expected balance after transaction
+            let expectedBalance = oldBalance;
+            if (tx.type === TransactionType.EXPENSE) {
+              expectedBalance -= tx.amount;
+            } else if (tx.type === TransactionType.INCOME) {
+              expectedBalance += tx.amount;
+            }
+
+            const diff = detectBalanceDifference(tx, expectedBalance, transactions);
+
+            if (diff && diff.shouldCreate) {
+              // Ensure Unknown category exists
+              const updatedCategories = ensureUnknownCategory(settings.categories);
+              if (updatedCategories.length !== settings.categories.length) {
+                for (const cat of updatedCategories) {
+                  if (!settings.categories.find(c => c.id === cat.id)) {
+                    await saveCategory(cat);
+                  }
+                }
+              }
+
+              // Create Unknown transaction
+              const unknownTx = createBalanceDifferenceTransaction(diff, account, tx);
+              const unknownWithId: Transaction = {
+                ...unknownTx,
+                id: uuidv4()
+              };
+              unknownTransactionsToCreate.push(unknownWithId);
+
+              console.log(`Balance difference detected: ${account.currency} ${Math.abs(diff.difference).toFixed(2)} on ${account.name}`);
+            }
+          }
+
           const updatedAccount = { ...account, balance: newBalance };
           await saveAccount(updatedAccount);
         }
       }
+    }
+
+    // Save Unknown transactions (if any were created)
+    for (const unknownTx of unknownTransactionsToCreate) {
+      await saveTransaction(unknownTx);
     }
 
     // Reload data
@@ -505,6 +561,76 @@ const App: React.FC = () => {
       await loadUserData();
     } catch (error) {
       console.error('Error adding recurring rule:', error);
+    }
+  };
+
+  const handleManualBalanceAdjustment = async (accountId: string, newBalance: number) => {
+    try {
+      const account = settings.accounts.find(a => a.id === accountId);
+      if (!account) {
+        console.error('Account not found');
+        return;
+      }
+
+      const oldBalance = account.balance;
+      const difference = Math.abs(newBalance - oldBalance);
+
+      // Don't create transaction if difference is negligible
+      if (difference < 0.01) {
+        console.log('Balance unchanged, skipping adjustment');
+        return;
+      }
+
+      // Ensure Unknown category exists
+      const updatedCategories = ensureUnknownCategory(settings.categories);
+      if (updatedCategories.length !== settings.categories.length) {
+        // Unknown category was added, save it
+        for (const cat of updatedCategories) {
+          if (!settings.categories.find(c => c.id === cat.id)) {
+            await saveCategory(cat);
+          }
+        }
+      }
+
+      // Create Unknown transaction for the difference
+      const unknownTx = createUnknownTransaction(accountId, oldBalance, newBalance, account);
+      const txWithId: Transaction = {
+        ...unknownTx,
+        id: uuidv4()
+      };
+
+      // Save transaction and update account balance
+      await saveTransaction(txWithId);
+      await saveAccount({ ...account, balance: newBalance });
+
+      // Reload data
+      await loadUserData();
+    } catch (error) {
+      console.error('Error adjusting balance:', error);
+    }
+  };
+
+  const handleCreateRecurringBill = async (transaction: Transaction, recurringData: RecurringBillFormData) => {
+    try {
+      // Convert transaction to ScheduledTransaction
+      const scheduledTxBase = convertTransactionToScheduled(transaction, recurringData);
+      const scheduledTx: ScheduledTransaction = {
+        ...scheduledTxBase,
+        id: uuidv4(),
+        status: 'PENDING',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      // Save to IndexedDB
+      await saveScheduledTransaction(scheduledTx);
+
+      // Reload data
+      await loadUserData();
+
+      console.log(`Created recurring bill for ${transaction.merchant}`);
+    } catch (error) {
+      console.error('Error creating recurring bill:', error);
     }
   };
 
@@ -801,6 +927,7 @@ const App: React.FC = () => {
             accounts={settings.accounts}
             transactions={filteredTransactions}
             onSelectAccount={handleAccountSelect}
+            onAdjustBalance={handleManualBalanceAdjustment}
             dateFilter={dateFilter}
             onDateFilterChange={handleDateFilterChange}
             customStartDate={customStartDate}
@@ -1017,6 +1144,7 @@ const App: React.FC = () => {
           onDelete={(id) => { handleDeleteTransaction(id); setEditingTransaction(null); }}
           onSave={handleUpdateTransaction}
           onAddRule={handleAddRuleFromTransaction}
+          onCreateRecurringBill={handleCreateRecurringBill}
         />
       )}
 
