@@ -66,6 +66,7 @@ import {
 import { convertTransactionToScheduled, RecurringBillFormData } from './services/transactionToScheduledService';
 import { cleanupOldReceipts } from './services/receiptCleanupService';
 import { shouldAutoBackup, exportToCSV, exportReceiptsZip, uploadBackup, markAutoBackupComplete } from './services/backupService';
+import { initializeDailyBackup, stopDailyBackup } from './services/dailyAutoBackupService';
 
 const DEFAULT_SETTINGS: AppSettings = {
   baseCurrency: 'USD',
@@ -156,7 +157,17 @@ const App: React.FC = () => {
   useEffect(() => {
     if (session?.user) {
       loadUserData();
+
+      // Initialize daily auto-backup scheduler
+      initializeDailyBackup(session.user.id).catch((error) => {
+        console.error('Failed to initialize daily backup:', error);
+      });
     }
+
+    // Cleanup: stop scheduler when component unmounts or user logs out
+    return () => {
+      stopDailyBackup();
+    };
   }, [session]);
 
   // Filter transactions based on date filter
@@ -794,6 +805,27 @@ const App: React.FC = () => {
     // Note: AddTransaction component will need to support pre-filled data
   };
 
+  const handleManualChequePairing = async (scheduledTx: ScheduledTransaction, transactionId: string) => {
+    try {
+      // Find the transaction to get its date
+      const transaction = transactions.find(t => t.id === transactionId);
+      if (!transaction) {
+        console.error('Transaction not found:', transactionId);
+        return;
+      }
+
+      // Mark the scheduled transaction as paid with the matched transaction
+      await markAsPaid(scheduledTx.id, transactionId, transaction.date);
+
+      // Reload user data to refresh the UI
+      await loadUserData();
+
+      console.log(`Cheque ${scheduledTx.chequeNumber || scheduledTx.merchant} paired with transaction ${transaction.merchant}`);
+    } catch (error) {
+      console.error('Error pairing cheque with transaction:', error);
+    }
+  };
+
   const handleSkipScheduled = async (scheduledTx: ScheduledTransaction) => {
     try {
       const reason = prompt('Reason for skipping (optional):');
@@ -1013,6 +1045,7 @@ const App: React.FC = () => {
             onCreateBatchCheques={() => setShowBatchChequeCreator(true)}
             onMarkPaid={handleMarkPaid}
             onSkip={handleSkipScheduled}
+            onManualPairing={handleManualChequePairing}
             onViewScheduled={(st) => {
               setEditingScheduled(st);
               setShowScheduledForm(true);

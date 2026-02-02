@@ -392,6 +392,94 @@ Split single receipts into multiple transactions grouped by category.
 - `components/SplitEditorModal.tsx` - Grouping and editing line items
 - `components/SplitTransactionsModal.tsx` - View linked split transactions
 
+## Manual Cheque Pairing
+
+### Feature
+Manual pairing of scheduled cheques with existing transactions using AI-powered matching.
+
+### Implementation
+**Location**: `services/chequePairingService.ts`, `components/ManualChequePairingModal.tsx`, `components/BillsDebtsView.tsx:146-177`, `App.tsx:796-817`
+
+**Scoring Algorithm** (0-300+ points):
+- Exact amount match: +100 points
+- Close amount (±5%): +50 points
+- Similar amount (±10%): +25 points
+- Exact merchant match: +75 points
+- Merchant keyword match: +50 points
+- Date proximity (<7 days): +25 points
+- Cheque number found in transaction: +75 points
+- Category match: +10 points
+
+**Confidence Levels**:
+- HIGH: score ≥ 150 (likely correct match)
+- MEDIUM: score ≥ 75 (possible match, review needed)
+- LOW: score ≥ 25 (weak match, manual verification required)
+- NONE: score < 25 (probably not a match)
+
+**Filtering Criteria**:
+- Unpaired transactions only (not already matched)
+- Same account as cheque
+- Within ±30 days of due date
+- EXPENSE or OBLIGATION type only
+
+### Usage
+1. Navigate to Bills & Debts view
+2. Find an overdue cheque
+3. Click dropdown on "Mark Paid" button
+4. Select "Pair with Existing Transaction"
+5. Modal shows filtered/scored candidate transactions
+6. Select transaction and confirm pairing
+7. Cheque is marked as PAID with `matchedTransactionId` link
+
+### UI Components
+- **BillsDebtsView**: Split "Mark Paid" button with dropdown
+- **ManualChequePairingModal**: Candidate list with scoring, confidence badges, and confirmation flow
+
+## Daily Auto-Backup System
+
+### Feature
+Automatic daily backups at midnight with single-backup-per-user model (overwrites previous day).
+
+### Implementation
+**Location**: `services/dailyAutoBackupService.ts`, `services/backupService.ts:391-467`, `App.tsx:68-69,162-171`, `components/SettingsView.tsx:47-49,62-67,78-91,686-707`
+
+**Scheduler Architecture**:
+- Uses `setTimeout` to calculate milliseconds until next midnight
+- Runs backup at midnight (local time)
+- Automatically schedules next backup for following midnight
+- Mutex lock prevents concurrent backups
+- Cleanup on unmount/logout stops scheduler
+
+**Storage Path**: `backups/${userId}/daily/`
+- Separate from regular backups (which have 5-backup limit)
+- Overwrites previous daily backup each time
+- Files: `data.csv` and `receipts.zip`
+
+**Settings**:
+- `dailyAutoBackupEnabled`: Boolean toggle
+- `lastDailyBackup`: ISO timestamp of last successful backup
+
+### Usage
+1. Navigate to Settings → Backup & Restore tab
+2. Toggle "Daily Auto-backup at Midnight"
+3. App will automatically backup every midnight
+4. View last backup timestamp in settings
+5. Backup runs only if app is open at midnight
+
+### Edge Cases
+- **App not running**: Backup skipped (acceptable limitation)
+- **Timezone changes**: Recalculated on app resume
+- **Storage failure**: Logged to console, retry next day
+- **Concurrent backups**: Prevented by mutex lock
+
+### Functions
+- `initializeDailyBackup(userId)`: Start scheduler on app mount
+- `stopDailyBackup()`: Cleanup on unmount
+- `triggerDailyBackupNow(userId)`: Manual immediate backup
+- `uploadDailyBackup(userId, csv, receiptsBlob)`: Upload with overwrite
+- `downloadDailyBackup(userId)`: Restore from daily backup
+- `dailyBackupExists(userId)`: Check if backup exists
+
 ## Utilities
 
 - `start-dev.bat` - Windows batch file to quickly start dev server

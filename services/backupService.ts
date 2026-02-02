@@ -386,3 +386,96 @@ export async function markAutoBackupComplete(): Promise<void> {
   const currentMonth = `${now.getFullYear()}-${now.getMonth() + 1}`;
   await saveSetting('lastAutoBackup', currentMonth);
 }
+
+/**
+ * Uploads a daily auto-backup to Supabase Storage
+ * Overwrites the previous daily backup (single backup per user)
+ */
+export async function uploadDailyBackup(userId: string, csv: string, receiptsBlob: Blob): Promise<void> {
+  const folderPath = `backups/${userId}/daily`;
+
+  // Delete existing daily backup files first (to ensure clean overwrite)
+  try {
+    await supabase.storage
+      .from('backups')
+      .remove([`${folderPath}/data.csv`, `${folderPath}/receipts.zip`]);
+  } catch (error) {
+    // Ignore errors if files don't exist
+    console.log('No existing daily backup to delete (this is normal for first backup)');
+  }
+
+  // Upload CSV
+  const csvFile = new Blob([csv], { type: 'text/csv' });
+  const { error: csvError } = await supabase.storage
+    .from('backups')
+    .upload(`${folderPath}/data.csv`, csvFile, {
+      upsert: true, // Overwrite if exists
+    });
+
+  if (csvError) {
+    throw new Error(`Failed to upload daily backup CSV: ${csvError.message}`);
+  }
+
+  // Upload receipts ZIP
+  const { error: zipError } = await supabase.storage
+    .from('backups')
+    .upload(`${folderPath}/receipts.zip`, receiptsBlob, {
+      upsert: true, // Overwrite if exists
+    });
+
+  if (zipError) {
+    throw new Error(`Failed to upload daily backup receipts: ${zipError.message}`);
+  }
+
+  console.log(`Daily backup uploaded to ${folderPath}`);
+}
+
+/**
+ * Downloads the daily auto-backup from Supabase Storage
+ */
+export async function downloadDailyBackup(userId: string): Promise<{ csv: string; receiptsBlob: Blob }> {
+  const folderPath = `backups/${userId}/daily`;
+
+  // Download CSV
+  const { data: csvData, error: csvError } = await supabase.storage
+    .from('backups')
+    .download(`${folderPath}/data.csv`);
+
+  if (csvError || !csvData) {
+    throw new Error(`Failed to download daily backup CSV: ${csvError?.message || 'No data'}`);
+  }
+
+  const csv = await csvData.text();
+
+  // Download receipts ZIP
+  const { data: zipData, error: zipError } = await supabase.storage
+    .from('backups')
+    .download(`${folderPath}/receipts.zip`);
+
+  if (zipError || !zipData) {
+    throw new Error(`Failed to download daily backup receipts: ${zipError?.message || 'No data'}`);
+  }
+
+  return { csv, receiptsBlob: zipData };
+}
+
+/**
+ * Checks if a daily backup exists for the user
+ */
+export async function dailyBackupExists(userId: string): Promise<boolean> {
+  const folderPath = `backups/${userId}/daily`;
+
+  const { data, error } = await supabase.storage
+    .from('backups')
+    .list(`backups/${userId}`, {
+      limit: 100,
+    });
+
+  if (error) {
+    console.error('Error checking for daily backup:', error);
+    return false;
+  }
+
+  // Check if 'daily' folder exists
+  return data?.some((file) => file.name === 'daily') || false;
+}

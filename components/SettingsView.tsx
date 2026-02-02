@@ -44,6 +44,8 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, onUpdateSettings,
   const [biometricEnabled, setBiometricEnabledState] = useState(false);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [autoBackupMonthly, setAutoBackupMonthly] = useState(false);
+  const [dailyAutoBackupEnabled, setDailyAutoBackupEnabled] = useState(false);
+  const [lastDailyBackup, setLastDailyBackup] = useState<string | null>(null);
   const [showBackupModal, setShowBackupModal] = useState(false);
 
   // Calculate orphaned transactions count
@@ -57,10 +59,14 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, onUpdateSettings,
     const enabled = await isBiometricEnabled();
     const available = await isBiometricAvailable();
     const autoBackup = await getSetting('autoBackupMonthly');
+    const dailyBackup = await getSetting('dailyAutoBackupEnabled');
+    const lastDaily = await getSetting('lastDailyBackup');
 
     setBiometricEnabledState(enabled);
     setBiometricAvailable(available);
     setAutoBackupMonthly(autoBackup === true);
+    setDailyAutoBackupEnabled(dailyBackup === true);
+    setLastDailyBackup(lastDaily || null);
   };
 
   const toggleBiometric = async () => {
@@ -73,6 +79,18 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, onUpdateSettings,
     const newValue = !autoBackupMonthly;
     await saveSetting('autoBackupMonthly', newValue);
     setAutoBackupMonthly(newValue);
+  };
+
+  const toggleDailyAutoBackup = async () => {
+    const newValue = !dailyAutoBackupEnabled;
+    await saveSetting('dailyAutoBackupEnabled', newValue);
+    setDailyAutoBackupEnabled(newValue);
+
+    // Reinitialize or stop the scheduler
+    if (newValue) {
+      // Reload the page to reinitialize the scheduler
+      window.location.reload();
+    }
   };
 
   // --- Category Handlers ---
@@ -659,6 +677,32 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, onUpdateSettings,
                     <span
                       className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${
                         autoBackupMonthly ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <div>
+                    <div className="font-medium text-gray-800">Daily Auto-backup at Midnight</div>
+                    <div className="text-sm text-gray-600 mt-1">
+                      Automatically backup every day at midnight (overwrites previous day)
+                    </div>
+                    {lastDailyBackup && (
+                      <div className="text-xs text-gray-500 mt-2">
+                        Last backup: {new Date(lastDailyBackup).toLocaleString()}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={toggleDailyAutoBackup}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
+                      dailyAutoBackupEnabled ? 'bg-blue-600' : 'bg-gray-300'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${
+                        dailyAutoBackupEnabled ? 'translate-x-6' : 'translate-x-1'
                       }`}
                     />
                   </button>

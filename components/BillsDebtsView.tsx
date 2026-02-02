@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { ScheduledTransaction, Account, Transaction, TransactionType } from '../types';
-import { PlusCircle, Calendar, Receipt, CheckCircle2 } from 'lucide-react';
+import { PlusCircle, Calendar, Receipt, CheckCircle2, ChevronDown } from 'lucide-react';
 import { getAllScheduledTransactions } from '../services/indexedDBService';
 import { updateOverdueStatus, getByStatus, getUpcoming } from '../services/scheduledTransactionsService';
 import ChequeSeriesModal from './ChequeSeriesModal';
 import InsufficientFundsWarning from './InsufficientFundsWarning';
 import { getAllInsufficientFundsWarnings } from '../services/insufficientFundsService';
 import { addChequeToSeries } from '../services/batchChequeService';
+import ManualChequePairingModal from './ManualChequePairingModal';
 
 interface BillsDebtsViewProps {
   accounts: Account[];
@@ -18,6 +19,7 @@ interface BillsDebtsViewProps {
   onSkip: (scheduledTx: ScheduledTransaction) => void;
   onViewScheduled: (scheduledTx: ScheduledTransaction) => void;
   onViewTransaction: (tx: Transaction) => void;
+  onManualPairing: (scheduledTx: ScheduledTransaction, transactionId: string) => void;
 }
 
 const BillsDebtsView: React.FC<BillsDebtsViewProps> = ({
@@ -30,11 +32,14 @@ const BillsDebtsView: React.FC<BillsDebtsViewProps> = ({
   onSkip,
   onViewScheduled,
   onViewTransaction,
+  onManualPairing,
 }) => {
   const [overdueItems, setOverdueItems] = useState<ScheduledTransaction[]>([]);
   const [upcomingItems, setUpcomingItems] = useState<ScheduledTransaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedSeries, setSelectedSeries] = useState<ScheduledTransaction[] | null>(null);
+  const [pairingCheque, setPairingCheque] = useState<ScheduledTransaction | null>(null);
+  const [showDropdown, setShowDropdown] = useState<string | null>(null);
 
   useEffect(() => {
     const filterTransactions = async () => {
@@ -144,15 +149,46 @@ const BillsDebtsView: React.FC<BillsDebtsViewProps> = ({
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onMarkPaid(item);
-                      }}
-                      className="bg-green-500 text-white px-3 py-1 rounded text-sm hover:bg-green-600"
-                    >
-                      Mark Paid
-                    </button>
+                    {/* Mark as Paid Dropdown */}
+                    <div className="relative">
+                      <div className="flex">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onMarkPaid(item);
+                          }}
+                          className="bg-green-500 text-white px-3 py-1 rounded-l text-sm hover:bg-green-600"
+                        >
+                          Mark Paid
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowDropdown(showDropdown === item.id ? null : item.id);
+                          }}
+                          className="bg-green-600 text-white px-2 py-1 rounded-r text-sm hover:bg-green-700 border-l border-green-400"
+                        >
+                          <ChevronDown size={14} />
+                        </button>
+                      </div>
+
+                      {/* Dropdown Menu */}
+                      {showDropdown === item.id && (
+                        <div className="absolute right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 min-w-[200px]">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setShowDropdown(null);
+                              setPairingCheque(item);
+                            }}
+                            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-purple-50 hover:text-purple-700 transition-colors"
+                          >
+                            Pair with Existing Transaction
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -390,6 +426,21 @@ const BillsDebtsView: React.FC<BillsDebtsViewProps> = ({
             setOverdueItems(overdue);
             const upcoming = await getUpcoming(30);
             setUpcomingItems(upcoming);
+          }}
+        />
+      )}
+
+      {/* Manual Cheque Pairing Modal */}
+      {pairingCheque && (
+        <ManualChequePairingModal
+          scheduledCheque={pairingCheque}
+          allTransactions={transactions}
+          allScheduledTransactions={scheduledTransactions}
+          accounts={accounts}
+          onClose={() => setPairingCheque(null)}
+          onConfirmPairing={(transactionId) => {
+            onManualPairing(pairingCheque, transactionId);
+            setPairingCheque(null);
           }}
         />
       )}
