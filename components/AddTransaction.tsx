@@ -11,11 +11,12 @@ interface AddTransactionProps {
   onAdd: (transactions: Transaction[]) => void;
   onCancel: () => void;
   settings: AppSettings;
+  onUpdateSettings: (settings: AppSettings) => void;
   existingTransactions: Transaction[];
   onAddRule?: (merchantKeyword: string, category: string, type: TransactionType) => void;
 }
 
-const AddTransaction: React.FC<AddTransactionProps> = ({ onAdd, onCancel, settings, existingTransactions, onAddRule }) => {
+const AddTransaction: React.FC<AddTransactionProps> = ({ onAdd, onCancel, settings, onUpdateSettings, existingTransactions, onAddRule }) => {
   const [mode, setMode] = useState<'ai' | 'manual'>('ai');
   
   // AI Mode State
@@ -841,7 +842,38 @@ const AddTransaction: React.FC<AddTransactionProps> = ({ onAdd, onCancel, settin
                <Info className="shrink-0 mt-0.5" size={14} />
                <p>Parsing optimized for {settings.baseCurrency}. Amounts in other currencies will be converted automatically.</p>
            </div>
-           
+
+           {/* Auto-Balancer Toggle */}
+           <div className="mb-4 bg-white p-3 rounded-xl shadow-sm border border-slate-200">
+             <div className="flex items-center justify-between gap-3">
+               <div className="flex-1">
+                 <div className="text-xs font-semibold text-slate-700 mb-0.5">Auto-Balance Detection</div>
+                 <p className="text-[10px] text-slate-500 leading-snug">
+                   {settings.autoBalancerEnabled !== false ? (
+                     <span className="text-emerald-600 font-medium">ON - Will detect balance discrepancies</span>
+                   ) : (
+                     <span className="text-amber-600 font-medium">OFF - Safe for bulk uploads</span>
+                   )}
+                 </p>
+               </div>
+               <button
+                 onClick={() => onUpdateSettings({
+                   ...settings,
+                   autoBalancerEnabled: settings.autoBalancerEnabled === false ? true : false
+                 })}
+                 className={`relative w-11 h-6 rounded-full transition-colors duration-200 flex-shrink-0 ${
+                   settings.autoBalancerEnabled !== false ? 'bg-brand-500' : 'bg-slate-300'
+                 }`}
+               >
+                 <div
+                   className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${
+                     settings.autoBalancerEnabled !== false ? 'translate-x-5' : 'translate-x-0'
+                   }`}
+                 />
+               </button>
+             </div>
+           </div>
+
            <div className="relative flex-1 mb-6 group flex flex-col gap-4">
               <textarea
                 className="w-full flex-1 min-h-[180px] p-5 bg-white rounded-2xl border-0 shadow-sm text-slate-700 text-lg placeholder:text-slate-300 focus:ring-2 focus:ring-brand-500 resize-none font-medium leading-relaxed"

@@ -78,7 +78,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   scheduledTransactions: [],
   gradientStartColor: '#d0dddf',
   gradientEndColor: '#dcfefb',
-  gradientAngle: 135
+  gradientAngle: 135,
+  autoBalancerEnabled: true
 };
 
 const App: React.FC = () => {
@@ -98,7 +99,8 @@ const App: React.FC = () => {
     scheduledTransactions: [],
     gradientStartColor: '#d0dddf',
     gradientEndColor: '#dcfefb',
-    gradientAngle: 135
+    gradientAngle: 135,
+    autoBalancerEnabled: true
   });
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
@@ -252,6 +254,7 @@ const App: React.FC = () => {
         gradientStartColor,
         gradientEndColor,
         gradientAngle,
+        autoBalancerEnabled,
         scheduledData,
       ] = await Promise.all([
         getAllTransactions(),
@@ -263,6 +266,7 @@ const App: React.FC = () => {
         getSetting('gradientStartColor'),
         getSetting('gradientEndColor'),
         getSetting('gradientAngle'),
+        getSetting('autoBalancerEnabled'),
         getAllScheduledTransactions(),
       ]);
 
@@ -294,6 +298,7 @@ const App: React.FC = () => {
         gradientStartColor: gradientStartColor || '#d0dddf',
         gradientEndColor: gradientEndColor || '#dcfefb',
         gradientAngle: gradientAngle || 135,
+        autoBalancerEnabled: autoBalancerEnabled !== undefined ? autoBalancerEnabled : true,
       });
 
       // Run cleanup on startup
@@ -388,8 +393,8 @@ const App: React.FC = () => {
             }
           }
 
-          // Feature 3: Detect balance difference (only if parsed balance was used)
-          if (usedParsedBalance && tx.accountId) {
+          // Feature 3: Detect balance difference (only if parsed balance was used and auto-balancer is enabled)
+          if (usedParsedBalance && tx.accountId && settings.autoBalancerEnabled !== false) {
             // Calculate expected balance after transaction
             let expectedBalance = oldBalance;
             if (tx.type === TransactionType.EXPENSE) {
@@ -677,6 +682,7 @@ const App: React.FC = () => {
       await saveSetting('gradientStartColor', newSettings.gradientStartColor);
       await saveSetting('gradientEndColor', newSettings.gradientEndColor);
       await saveSetting('gradientAngle', newSettings.gradientAngle);
+      await saveSetting('autoBalancerEnabled', newSettings.autoBalancerEnabled);
 
       // Save categories
       for (const cat of newSettings.categories) {
@@ -949,6 +955,7 @@ const App: React.FC = () => {
             onAdd={handleAddTransactions}
             onCancel={() => setCurrentView('dashboard')}
             settings={settings}
+            onUpdateSettings={handleUpdateSettings}
             existingTransactions={transactions}
             onAddRule={handleAddRuleFromTransaction}
           />

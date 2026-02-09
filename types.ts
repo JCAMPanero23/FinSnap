@@ -94,6 +94,9 @@ export interface AppSettings {
   gradientStartColor?: string; // Default: #d0dddf
   gradientEndColor?: string; // Default: #dcfefb
   gradientAngle?: number; // Default: 135 (degrees)
+
+  // Auto-Balancer Settings
+  autoBalancerEnabled?: boolean; // Default: true - Detects balance discrepancies when parsing transactions
 }
 
 export interface Transaction {

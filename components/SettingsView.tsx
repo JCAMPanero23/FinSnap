@@ -357,6 +357,39 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, onUpdateSettings,
                 </p>
               </div>
             </div>
+
+            {/* AI Parser Settings */}
+            <div className="mt-6">
+              <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-3">AI Parser</h3>
+              <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-sm font-semibold text-slate-700">Auto-Balance Discrepancy Detection</div>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Automatically create Unknown transactions when AI detects balance differences.
+                      <span className="block mt-1 text-amber-600 font-medium">
+                        Turn OFF when bulk-uploading multiple accounts to avoid duplicate discrepancies.
+                      </span>
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setLocalSettings(prev => ({
+                      ...prev,
+                      autoBalancerEnabled: prev.autoBalancerEnabled === false ? true : false
+                    }))}
+                    className={`relative w-12 h-6 rounded-full transition-colors duration-200 flex-shrink-0 ml-4 ${
+                      localSettings.autoBalancerEnabled !== false ? 'bg-brand-500' : 'bg-slate-300'
+                    }`}
+                  >
+                    <div
+                      className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${
+                        localSettings.autoBalancerEnabled !== false ? 'translate-x-6' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+            </div>
           </section>
         )}
 
