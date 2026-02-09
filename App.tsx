@@ -673,7 +673,7 @@ const App: React.FC = () => {
         // Delete transactions one by one with error handling
         for (const tx of unknownTxns) {
           try {
-            await deleteTransaction(tx.id);
+            await deleteTransactionDB(tx.id);
             successCount++;
           } catch (err) {
             console.error(`Failed to delete transaction ${tx.id}:`, err);
