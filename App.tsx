@@ -667,12 +667,27 @@ const App: React.FC = () => {
           tx.merchant === 'Balance Discrepancy Detected'
         );
 
+        let successCount = 0;
+        let failCount = 0;
+
+        // Delete transactions one by one with error handling
         for (const tx of unknownTxns) {
-          await deleteTransaction(tx.id);
+          try {
+            await deleteTransaction(tx.id);
+            successCount++;
+          } catch (err) {
+            console.error(`Failed to delete transaction ${tx.id}:`, err);
+            failCount++;
+          }
         }
 
         await loadUserData();
-        alert(`✅ Deleted ${unknownTxns.length} Unknown transactions. Please update your account balances manually in Settings → Accounts.`);
+
+        if (failCount === 0) {
+          alert(`✅ Successfully deleted ${successCount} Unknown transactions.\n\nPlease update your account balances manually in Settings → Accounts.`);
+        } else {
+          alert(`⚠️ Deleted ${successCount} transactions, but ${failCount} failed.\n\nPlease try again or check console for errors.\n\nUpdate your account balances manually in Settings → Accounts.`);
+        }
         return;
       }
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AppSettings, Category, Account, AccountType, RecurringRule, TransactionType, Transaction } from '../types';
-import { Plus, X, Save, Trash2, RotateCcw, CreditCard, Wallet, Building2, Banknote, Tag, ArrowRight, RefreshCw, Fingerprint, Cloud } from 'lucide-react';
+import { Plus, X, Save, Trash2, RotateCcw, CreditCard, Wallet, Building2, Banknote, Tag, ArrowRight, RefreshCw, Fingerprint, Cloud, Loader2 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { isBiometricEnabled, setBiometricEnabled, isBiometricAvailable } from '../services/biometricService';
 import { getSetting, saveSetting } from '../services/indexedDBService';
@@ -25,6 +25,7 @@ const ACCOUNT_TYPES: AccountType[] = ['Bank', 'Credit Card', 'Cash', 'Wallet', '
 const SettingsView: React.FC<SettingsViewProps> = ({ settings, onUpdateSettings, onBack, transactions }) => {
   const [localSettings, setLocalSettings] = useState<AppSettings>(JSON.parse(JSON.stringify(settings)));
   const [activeTab, setActiveTab] = useState<'general' | 'categories' | 'accounts' | 'rules' | 'security' | 'backup' | 'developer'>('general');
+  const [deletingUnknown, setDeletingUnknown] = useState(false);
 
   // Category State
   const [newCategoryName, setNewCategoryName] = useState('');
@@ -778,19 +779,31 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, onUpdateSettings,
                         </div>
                       </div>
                       <button
-                        onClick={() => {
+                        onClick={async () => {
                           if (unknownCount === 0) {
                             alert('No Unknown transactions to delete.');
                             return;
                           }
                           if (window.confirm(`⚠️ This will DELETE ${unknownCount} Unknown transactions. Your account balances will change. Continue?`)) {
-                            onUpdateSettings({ ...localSettings, __deleteUnknownTransactions: true } as any);
+                            setDeletingUnknown(true);
+                            try {
+                              await onUpdateSettings({ ...localSettings, __deleteUnknownTransactions: true } as any);
+                            } finally {
+                              setDeletingUnknown(false);
+                            }
                           }
                         }}
-                        disabled={unknownCount === 0}
-                        className="w-full px-4 py-3 bg-amber-500 text-white rounded-lg font-bold hover:bg-amber-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={unknownCount === 0 || deletingUnknown}
+                        className="w-full px-4 py-3 bg-amber-500 text-white rounded-lg font-bold hover:bg-amber-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                       >
-                        Delete All Unknown Transactions ({unknownCount})
+                        {deletingUnknown ? (
+                          <>
+                            <Loader2 size={18} className="animate-spin" />
+                            Deleting {unknownCount} transactions...
+                          </>
+                        ) : (
+                          <>Delete All Unknown Transactions ({unknownCount})</>
+                        )}
                       </button>
                     </>
                   );
