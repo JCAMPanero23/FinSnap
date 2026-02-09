@@ -61,7 +61,8 @@ import {
   ensureUnknownCategory,
   createUnknownTransaction,
   detectBalanceDifference,
-  createBalanceDifferenceTransaction
+  createBalanceDifferenceTransaction,
+  UNKNOWN_CATEGORY
 } from './services/unknownTransactionService';
 import { convertTransactionToScheduled, RecurringBillFormData } from './services/transactionToScheduledService';
 import { cleanupOldReceipts } from './services/receiptCleanupService';
@@ -658,6 +659,23 @@ const App: React.FC = () => {
   const handleUpdateSettings = async (newSettings: AppSettings) => {
     try {
       // Handle Developer Reset Actions
+      if ((newSettings as any).__deleteUnknownTransactions) {
+        // Delete All Unknown Transactions
+        const unknownTxns = transactions.filter(tx =>
+          tx.category === UNKNOWN_CATEGORY.name ||
+          tx.merchant === 'Manual Balance Adjustment' ||
+          tx.merchant === 'Balance Discrepancy Detected'
+        );
+
+        for (const tx of unknownTxns) {
+          await deleteTransaction(tx.id);
+        }
+
+        await loadUserData();
+        alert(`✅ Deleted ${unknownTxns.length} Unknown transactions. Please update your account balances manually in Settings → Accounts.`);
+        return;
+      }
+
       if ((newSettings as any).__resetTransactions) {
         // Soft Reset - Delete all transactions and reset account balances to 0
         await clearTransactions();

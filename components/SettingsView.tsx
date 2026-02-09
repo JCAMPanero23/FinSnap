@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { isBiometricEnabled, setBiometricEnabled, isBiometricAvailable } from '../services/biometricService';
 import { getSetting, saveSetting } from '../services/indexedDBService';
 import BackupRestoreModal from './BackupRestoreModal';
+import { isUnknownTransaction, filterUnknownTransactions } from '../services/unknownTransactionService';
 
 interface SettingsViewProps {
   settings: AppSettings;
@@ -754,6 +755,48 @@ const SettingsView: React.FC<SettingsViewProps> = ({ settings, onUpdateSettings,
             </div>
 
             <div className="space-y-4">
+              {/* Delete All Unknown Transactions */}
+              <div className="bg-white rounded-xl shadow-sm border border-amber-200 p-5">
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <h4 className="font-bold text-amber-800 mb-1">Delete All Unknown Transactions</h4>
+                    <p className="text-xs text-slate-500 mb-2">
+                      Remove all "Balance Discrepancy Detected" and "Manual Balance Adjustment" transactions.
+                    </p>
+                    <p className="text-xs text-amber-600 font-medium">
+                      ⚠️ Your account balances will be affected. Make sure to manually update account balances after deletion.
+                    </p>
+                  </div>
+                </div>
+                {(() => {
+                  const unknownCount = transactions?.filter(isUnknownTransaction).length || 0;
+                  return (
+                    <>
+                      <div className="mb-3 p-3 bg-amber-50 rounded-lg border border-amber-200">
+                        <div className="text-xs text-amber-700">
+                          Found <span className="font-bold text-lg">{unknownCount}</span> Unknown transactions
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          if (unknownCount === 0) {
+                            alert('No Unknown transactions to delete.');
+                            return;
+                          }
+                          if (window.confirm(`⚠️ This will DELETE ${unknownCount} Unknown transactions. Your account balances will change. Continue?`)) {
+                            onUpdateSettings({ ...localSettings, __deleteUnknownTransactions: true } as any);
+                          }
+                        }}
+                        disabled={unknownCount === 0}
+                        className="w-full px-4 py-3 bg-amber-500 text-white rounded-lg font-bold hover:bg-amber-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Delete All Unknown Transactions ({unknownCount})
+                      </button>
+                    </>
+                  );
+                })()}
+              </div>
+
               {/* Soft Reset */}
               <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
                 <div className="flex items-start justify-between mb-3">
